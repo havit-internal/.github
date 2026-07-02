@@ -19,14 +19,15 @@ health files, and a canonical label set with zero per-repo work.
 │   └── config.yml           ← Disables blank issues
 ├── pull_request_template.md ← Verify: / Refs — see QA convention below
 ├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
-└── workflows/                ← Planned: reusable workflows (label sync, QA routing, CI) — not yet built
+└── workflows/
+    └── qa-routing.yml        ← Reusable workflow — see "PR convention" below. Label sync / CI still planned.
 ```
 
 ## Related org repos
 
 | Repo | Role |
 |------|------|
-| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `labels.yml`. Reusable workflows (QA routing, label sync, CI) will also live here, under `.github/workflows/`, once built. |
+| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml` built; label sync and CI still planned). |
 | `havit-internal/002.HFW-NewProjectTemplate-Blazor` | GitHub template repo for new Blazor projects. Not org-wide — covers the Blazor stack specifically, not every repo type. |
 
 Templates from this repo are **inherited** by every repo in the org that does
@@ -86,17 +87,59 @@ ad-hoc labels in individual repos — edit this file and open a PR.
 ## PR convention: `Verify:` vs `Refs`
 
 The PR template contains a `Verify:` line. Fill it with the issue number(s)
-this PR fixes. **Planned:** a QA-routing workflow, living in this repo's own
-`.github/workflows/`, will pick these up on merge, relabel the issues
-`status:ready-for-qa`, and assign the QA owner from `.github/QAOWNERS` in the
-consuming repo. Until that workflow exists, relabeling and QA assignment are
-manual — the convention below still matters so it's a clean cutover once the
-automation lands.
+this PR fixes — one `Verify: #N` per line, or several numbers on one line.
+On merge, the `qa-routing` workflow (see below) picks these up, relabels the
+issues `status:ready-for-qa`, and assigns everyone in `.github/QAOWNERS`.
 
-- `Verify: #N` — This PR fixes issue N. Route to QA on merge.
+- `Verify: #N` — This PR fixes issue N. Routed to QA on merge.
 - `Refs #N`   — Related issue, no action. Cross-link only.
 - **Never use** `Closes #N`, `Fixes #N`, or `Resolves #N` — GitHub auto-closes
   the referenced issue on merge, bypassing the QA verification gate.
+
+## QA routing workflow
+
+`workflows/qa-routing.yml` is a reusable workflow. It does not run on its own —
+each consuming repo needs a thin wrapper that triggers it on merge:
+
+```yaml
+# .github/workflows/qa-routing.yml (in the consuming repo)
+name: QA routing
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  route-to-qa:
+    if: github.event.pull_request.merged == true
+    permissions:
+      issues: write
+      contents: read
+    uses: havit-internal/.github/.github/workflows/qa-routing.yml@main
+```
+
+What it does on merge:
+1. Scans the PR body for `Verify: #N` lines. No matches → no-op.
+2. For each linked issue, strips any existing `status:*` label and adds
+   `status:ready-for-qa` (handles the qa-rejected → refix → re-verify loop
+   cleanly, since the old status is always replaced, not stacked).
+3. Assigns **everyone** listed in that repo's `.github/QAOWNERS` — see below.
+4. Leaves a comment on the issue linking back to the merged PR.
+
+**`.github/QAOWNERS` format** (lives in each consuming repo, not here):
+one GitHub username per line, `@` optional, `#` for comments, blank lines
+ignored:
+
+```
+# QA owners for this repo — all are assigned on every merge
+@alice
+@bob
+```
+
+If a repo has no `QAOWNERS` file, the workflow still relabels the issue
+`status:ready-for-qa` but leaves it unassigned (logged as a warning in the
+workflow run) — so repos can adopt this incrementally rather than needing
+`QAOWNERS` set up before merges work at all.
 
 ## Changing something here
 
