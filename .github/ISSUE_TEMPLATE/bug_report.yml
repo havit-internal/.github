@@ -1,0 +1,73 @@
+name: Bug report
+description: Something broken in dev, staging, or production
+title: "[Bug] "
+labels:
+  - "type:bug"
+  - "needs-triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Fill in the fields below so QA can reproduce and verify the fix.
+        Severity is captured in the dropdown; the corresponding `sev:*` label will be applied during triage.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "sev:1 — outage / data loss / customer-blocking"
+        - "sev:2 — major functionality broken, no reasonable workaround"
+        - "sev:3 — minor functionality broken, workaround exists"
+        - "sev:4 — cosmetic / low impact"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: URL / branch / commit SHA / browser + OS as relevant
+      placeholder: "https://app.havit.cz  ·  main @ 3a4b1c2  ·  Chrome 128 / Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal and deterministic if possible. Numbered list preferred.
+      placeholder: |
+        1. Navigate to …
+        2. Click …
+        3. Observe …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happens. Include error messages verbatim.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Screenshots, stack traces, links to Application Insights / logs, correlation IDs.
+
+  - type: textarea
+    id: parent
+    attributes:
+      label: Related work
+      description: Parent Story / Feature this bug affects, related issues.
+      placeholder: "Refs #123"

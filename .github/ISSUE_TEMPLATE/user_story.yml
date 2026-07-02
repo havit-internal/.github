@@ -1,0 +1,46 @@
+name: User story
+description: A user-facing slice of work
+title: "[Story] "
+labels:
+  - "type:story"
+  - "needs-triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Stories describe **outcomes for a user**, not implementation. Use the "As a … so that …" format.
+        Break implementation into Task sub-issues once the story is ready to be worked on.
+
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      value: |
+        As a <role>,
+        I want <capability>,
+        so that <outcome>.
+    validations:
+      required: true
+
+  - type: textarea
+    id: ac
+    attributes:
+      label: Acceptance criteria
+      description: Testable statements. Given / When / Then is welcome but not required.
+      placeholder: |
+        - When the user … , then …
+        - Given …, the system should …
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / open questions
+      description: Design considerations, edge cases, dependencies.
+
+  - type: textarea
+    id: parent
+    attributes:
+      label: Parent feature / related work
+      placeholder: "Refs #123  (parent Feature)"

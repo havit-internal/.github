@@ -1,0 +1,84 @@
+# Canonical label set for the havit-internal organization.
+#
+# This file is the source of truth. A label-sync workflow (in
+# havit-internal/.github-workflows) reads it and reconciles every repo's
+# label set on a schedule and on push to main.
+#
+# Format is compatible with `micnncim/action-label-syncer` and
+# `EndBug/label-sync`. Colors are 6-char hex without the `#`.
+
+# ─── Types ──────────────────────────────────────────────────────────────
+- name: "type:feature"
+  color: "8250df"
+  description: "Outcome-level work; contains stories"
+
+- name: "type:story"
+  color: "0969da"
+  description: "User-facing slice of work"
+
+- name: "type:task"
+  color: "1a7f37"
+  description: "Implementation slice — a piece of a story"
+
+- name: "type:bug"
+  color: "d1242f"
+  description: "Something broken"
+
+# ─── Severity (bugs only) ───────────────────────────────────────────────
+- name: "sev:1"
+  color: "b60205"
+  description: "Outage / data loss / customer-blocking"
+
+- name: "sev:2"
+  color: "d93f0b"
+  description: "Major functionality broken, no reasonable workaround"
+
+- name: "sev:3"
+  color: "fbca04"
+  description: "Minor functionality broken, workaround exists"
+
+- name: "sev:4"
+  color: "c5def5"
+  description: "Cosmetic / low impact"
+
+# ─── Status (the workflow gate) ─────────────────────────────────────────
+- name: "status:in-progress"
+  color: "0969da"
+  description: "Being worked on"
+
+- name: "status:in-review"
+  color: "8250df"
+  description: "PR open, awaiting code review"
+
+- name: "status:ready-for-qa"
+  color: "9a6700"
+  description: "Merged to main; QA to verify"
+
+- name: "status:qa-rejected"
+  color: "cf222e"
+  description: "QA rejected; back to developer"
+
+# ─── Meta / triage ──────────────────────────────────────────────────────
+- name: "needs-triage"
+  color: "e6e6e6"
+  description: "New issue — needs labels and assignee"
+
+- name: "blocked"
+  color: "000000"
+  description: "Blocked by something external"
+
+- name: "good-first-issue"
+  color: "7057ff"
+  description: "Good for newcomers to the codebase"
+
+- name: "help-wanted"
+  color: "008672"
+  description: "Extra attention is needed"
+
+- name: "duplicate"
+  color: "cfd3d7"
+  description: "Duplicate of another issue"
+
+- name: "wontfix"
+  color: "ffffff"
+  description: "Will not be worked on"

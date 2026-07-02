@@ -1,0 +1,45 @@
+name: Task
+description: An implementation slice — a piece of a Story
+title: "[Task] "
+labels:
+  - "type:task"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tasks are implementation-level work items — usually half-a-day to two days.
+        Attach them as **sub-issues** of the parent Story so the tree stays traversable.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What needs to be done
+      description: One-paragraph description of the change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of done
+      description: Testable statements that describe "complete".
+      value: |
+        - [ ] Code implemented in the affected projects
+        - [ ] Unit / integration tests updated
+        - [ ] No lint warnings introduced
+        - [ ] Documentation / XML comments updated where relevant
+    validations:
+      required: true
+
+  - type: input
+    id: parent
+    attributes:
+      label: Parent Story / Feature
+      placeholder: "#123"
+      description: Link the parent so this can be a sub-issue.
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Design notes
+      description: Technical considerations, links, references.

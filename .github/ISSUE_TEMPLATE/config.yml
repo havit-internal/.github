@@ -1,0 +1,12 @@
+# Disallow the empty issue path. Every issue must go through one of the templates
+# above, so severity, acceptance criteria, and task definition-of-done are captured.
+blank_issues_enabled: false
+
+# Optional: uncomment and set real URLs when you have them.
+# contact_links:
+#   - name: HAVIT internal wiki
+#     url: https://wiki.havit.cz
+#     about: Check the wiki before opening an issue.
+#   - name: Ask the team on Slack
+#     url: https://havit-internal.slack.com
+#     about: Questions and discussion — not for tracked work.
