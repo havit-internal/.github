@@ -12,26 +12,31 @@ health files, and a canonical label set with zero per-repo work.
 ```
 .github/
 ├── ISSUE_TEMPLATE/
+│   ├── feature.yml          ← Outcome-level container; rolls up Stories
 │   ├── bug_report.yml       ← "Something broken" — severity + repro required
 │   ├── user_story.yml       ← "As a … so that …" with acceptance criteria
 │   ├── task.yml             ← Implementation slice with definition-of-done
 │   └── config.yml           ← Disables blank issues
 ├── pull_request_template.md ← Verify: / Refs — see QA convention below
-└── labels.yml               ← Source of truth for org-wide labels
+├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
+└── workflows/                ← Planned: reusable workflows (label sync, QA routing, CI) — not yet built
 ```
 
-## The three org repos and what each holds
+## Related org repos
 
 | Repo | Role |
 |------|------|
-| `havit-internal/.github`           | Fallback files: issue templates, PR template, `labels.yml`. |
-| `havit-internal/.github-workflows` | Central reusable workflows (QA routing, label sync, CI). |
-| `havit-internal/repo-template`     | File baseline copied into new repos on creation. |
+| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `labels.yml`. Reusable workflows (QA routing, label sync, CI) will also live here, under `.github/workflows/`, once built. |
+| `havit-internal/002.HFW-NewProjectTemplate-Blazor` | GitHub template repo for new Blazor projects. Not org-wide — covers the Blazor stack specifically, not every repo type. |
 
 Templates from this repo are **inherited** by every repo in the org that does
-not define its own. Workflow files, on the other hand, are **not** inherited —
-they only run in the repo they live in, which is why the reusable workflows
-sit in a separate repo and each consumer carries a thin wrapper.
+not define its own. Workflow files are **not** inherited — a reusable workflow
+defined here still has to be called explicitly from a thin wrapper in each
+consuming repo (`uses: havit-internal/.github/.github/workflows/<name>.yml@main`).
+No separate workflows repo is needed for this — reusable workflows can be
+called from any repo, including this one. If workflow versioning or ownership
+ever needs to diverge from the templates/labels here, split them out then;
+until that's a real need, keeping everything in one repo is simpler.
 
 ## Issue template inheritance — the gotcha
 
@@ -42,18 +47,51 @@ repo entirely — they do not merge with local templates.
 Prefer keeping repos with **zero local templates** so they inherit the full
 set defined here.
 
+## Feature → Story → Task hierarchy
+
+- **Feature** — outcome-level container. Not implemented directly; holds Stories.
+- **Story** — a vertical, user-facing slice of a Feature. The unit that gets
+  planned and delivered.
+- **Task** — an implementation-level piece of a Story.
+- **Bug** — unplanned work; can reference a parent Story or Feature via
+  "Related work" but doesn't require one.
+
+Each template's "parent" field is manual (plain issue number, not GitHub's
+native sub-issue linking) — link them explicitly and use sub-issues where it
+helps navigation.
+
+## Work type vs. labels
+
+Work type (feature / story / task / bug) is **not** a label — it's set via
+GitHub's native org-level **Issue Types** (org `Settings → Issue types`),
+which sync to every repo automatically with no workflow needed. `Task`,
+`Bug`, and `Feature` are already configured on the org; `Story` still needs
+to be added there to match `user_story.yml`, which already sets `type: story`.
+
+The issue templates set their Issue Type via the top-level `type:` key in
+each `.github/ISSUE_TEMPLATE/*.yml` file (not the `labels:` key). `labels.yml`
+below is only for things Issue Types don't cover: severity, workflow status,
+and triage/meta labels.
+
 ## Label sync
 
-`labels.yml` is the canonical list. It is applied to every repo in the org by
-a scheduled workflow in `havit-internal/.github-workflows` (label-sync). Do
-not create ad-hoc labels in individual repos — edit this file and open a PR.
+`labels.yml` is the canonical list for severity (`sev:*`), status (`status:*`),
+and meta labels (`needs-triage`, `blocked`, etc.) — everything that isn't a
+work type. **Planned:** a scheduled label-sync workflow, living in this
+repo's own `.github/workflows/`, will apply it to every repo in the org. That
+workflow does not exist yet, so today this file is documentation only —
+labels must be applied to each repo manually until it's built. Do not create
+ad-hoc labels in individual repos — edit this file and open a PR.
 
 ## PR convention: `Verify:` vs `Refs`
 
 The PR template contains a `Verify:` line. Fill it with the issue number(s)
-this PR fixes — the QA-routing workflow will pick these up on merge, relabel
-the issues `status:ready-for-qa`, and assign the QA owner from `.github/QAOWNERS`
-in the consuming repo.
+this PR fixes. **Planned:** a QA-routing workflow, living in this repo's own
+`.github/workflows/`, will pick these up on merge, relabel the issues
+`status:ready-for-qa`, and assign the QA owner from `.github/QAOWNERS` in the
+consuming repo. Until that workflow exists, relabeling and QA assignment are
+manual — the convention below still matters so it's a clean cutover once the
+automation lands.
 
 - `Verify: #N` — This PR fixes issue N. Route to QA on merge.
 - `Refs #N`   — Related issue, no action. Cross-link only.
