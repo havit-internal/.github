@@ -98,7 +98,7 @@ issues `status:ready-for-qa`, and assigns everyone in `.github/QAOWNERS`.
 
 ## QA routing workflow
 
-`workflows/qa-routing.yml` is a reusable workflow. It does not run on its own —
+`.github/workflows/qa-routing.yml` is a reusable workflow. It does not run on its own —
 each consuming repo needs a thin wrapper that triggers it on merge:
 
 ```yaml

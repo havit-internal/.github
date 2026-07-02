@@ -22,8 +22,8 @@ jobs:
           script: |
             const body = context.payload.pull_request.body || '';
 
-            const issueNumbers = [...body.matchAll(/^Verify:\s*(.+)$/gim)]
-              .flatMap(m => [...m[1].matchAll(/#(\d+)/g)].map(n => parseInt(n[1], 10)));
+            const issueNumbers = [...new Set([...body.matchAll(/^Verify:\s*(.+)$/gim)]
+              .flatMap(m => [...m[1].matchAll(/#(\d+)/g)].map(n => parseInt(n[1], 10))))];
 
             if (issueNumbers.length === 0) {
               core.info('No "Verify: #N" lines found in the PR body — nothing to route.');
@@ -39,9 +39,9 @@ jobs:
               });
               qaOwners = Buffer.from(data.content, 'base64')
                 .toString('utf8')
-                .split('\n')
-                .map(l => l.trim())
-                .filter(l => l && !l.startsWith('#'))
+                .split(/\r?\n/)
+                .map(l => l.replace(/#.*$/, '').trim())
+                .filter(l => l)
                 .map(l => l.replace(/^@/, ''));
             } catch (err) {
               if (err.status === 404) {
