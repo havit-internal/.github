@@ -1,0 +1,7 @@
+{
+  "name": "gh-issue-templates",
+  "description": "Create GitHub issues that comply with havit-internal's org-wide issue templates (Bug report, Task, User story, Feature)",
+  "author": {
+    "name": "HAVIT"
+  }
+}

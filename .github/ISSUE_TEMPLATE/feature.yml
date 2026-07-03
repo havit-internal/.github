@@ -21,27 +21,18 @@ body:
       required: true
 
   - type: textarea
-    id: success
+    id: details
     attributes:
-      label: Success criteria
-      description: How do we know this Feature is done — testable at the outcome level, not per-Story.
+      label: Details
+      description: Success criteria, child Story sub-issues, notes / open questions.
       placeholder: |
+        Success criteria:
         - …
         - …
+
+        Stories:
+        - [ ] #
+
+        Notes / open questions:
     validations:
       required: true
-
-  - type: textarea
-    id: stories
-    attributes:
-      label: Stories
-      description: Child Story sub-issues, added as they're created. Leave blank at creation time.
-      placeholder: |
-        - [ ] #
-        - [ ] #
-
-  - type: textarea
-    id: notes
-    attributes:
-      label: Notes / open questions
-      description: Scope boundaries, dependencies, risks.
