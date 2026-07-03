@@ -7,22 +7,9 @@
 # Format is compatible with `micnncim/action-label-syncer` and
 # `EndBug/label-sync`. Colors are 6-char hex without the `#`.
 
-# ─── Types ──────────────────────────────────────────────────────────────
-- name: "type:feature"
-  color: "8250df"
-  description: "Outcome-level work; contains stories"
-
-- name: "type:story"
-  color: "0969da"
-  description: "User-facing slice of work"
-
-- name: "type:task"
-  color: "1a7f37"
-  description: "Implementation slice — a piece of a story"
-
-- name: "type:bug"
-  color: "d1242f"
-  description: "Something broken"
+# Work type (feature / story / task / bug) is NOT tracked here — it's handled
+# by GitHub's native org-level Issue Types (Settings → Issue types), which
+# sync to every repo automatically with no workflow needed. See README.
 
 # ─── Severity (bugs only) ───────────────────────────────────────────────
 - name: "sev:1"

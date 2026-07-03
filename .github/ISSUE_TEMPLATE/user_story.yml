@@ -1,8 +1,8 @@
 name: User story
 description: A user-facing slice of work
 title: "[Story] "
+type: story
 labels:
-  - "type:story"
   - "needs-triage"
 body:
   - type: markdown

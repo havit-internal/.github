@@ -1,8 +1,7 @@
 name: Task
 description: An implementation slice — a piece of a Story
 title: "[Task] "
-labels:
-  - "type:task"
+type: task
 body:
   - type: markdown
     attributes:

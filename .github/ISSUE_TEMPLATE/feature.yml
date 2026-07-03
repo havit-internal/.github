@@ -1,0 +1,47 @@
+name: Feature
+description: Outcome-level work that will be broken down into Stories
+title: "[Feature] "
+type: feature
+labels:
+  - "needs-triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Features describe an **outcome**, not implementation — they're a container
+        for Stories, not something worked on directly. Keep this light; break the
+        real work into Story sub-issues once this is triaged.
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What changes for the business or the user once this is delivered? Why now?
+    validations:
+      required: true
+
+  - type: textarea
+    id: success
+    attributes:
+      label: Success criteria
+      description: How do we know this Feature is done — testable at the outcome level, not per-Story.
+      placeholder: |
+        - …
+        - …
+    validations:
+      required: true
+
+  - type: textarea
+    id: stories
+    attributes:
+      label: Stories
+      description: Child Story sub-issues, added as they're created. Leave blank at creation time.
+      placeholder: |
+        - [ ] #
+        - [ ] #
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / open questions
+      description: Scope boundaries, dependencies, risks.
