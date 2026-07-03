@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","on-prem"]'
+        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]'
         type: string
         default: '["ubuntu-latest"]'
 
