@@ -116,6 +116,9 @@ jobs:
       issues: write
       contents: read
     uses: havit-internal/.github/.github/workflows/qa-routing.yml@main
+    with:
+      runner: '["ubuntu-latest"]'   # optional — defaults to this. JSON array
+                                    # of runner labels, e.g. '["self-hosted","on-prem"]'
 ```
 
 What it does on merge:

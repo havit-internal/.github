@@ -7,6 +7,11 @@ name: QA routing
 
 on:
   workflow_call:
+    inputs:
+      runner:
+        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","on-prem"]'
+        type: string
+        default: '["ubuntu-latest"]'
 
 permissions:
   issues: write
@@ -14,7 +19,7 @@ permissions:
 
 jobs:
   route-to-qa:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
       - name: Relabel and assign linked issues to QA
         uses: actions/github-script@v7
