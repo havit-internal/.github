@@ -19,27 +19,19 @@ body:
       required: true
 
   - type: textarea
-    id: dod
+    id: details
     attributes:
-      label: Definition of done
-      description: Testable statements that describe "complete".
+      label: Details
+      description: Definition of done, parent Story/Feature link, design notes — whatever's relevant.
       value: |
+        Definition of done:
         - [ ] Code implemented in the affected projects
         - [ ] Unit / integration tests updated
         - [ ] No lint warnings introduced
         - [ ] Documentation / XML comments updated where relevant
+
+        Parent Story / Feature: #
+
+        Design notes:
     validations:
       required: true
-
-  - type: input
-    id: parent
-    attributes:
-      label: Parent Story / Feature
-      placeholder: "#123"
-      description: Link the parent so this can be a sub-issue.
-
-  - type: textarea
-    id: notes
-    attributes:
-      label: Design notes
-      description: Technical considerations, links, references.

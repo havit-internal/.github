@@ -23,24 +23,17 @@ body:
       required: true
 
   - type: textarea
-    id: ac
+    id: details
     attributes:
-      label: Acceptance criteria
-      description: Testable statements. Given / When / Then is welcome but not required.
+      label: Details
+      description: Acceptance criteria, notes / open questions, parent feature or related work.
       placeholder: |
+        Acceptance criteria:
         - When the user … , then …
         - Given …, the system should …
+
+        Notes / open questions:
+
+        Parent feature / related work: Refs #123
     validations:
       required: true
-
-  - type: textarea
-    id: notes
-    attributes:
-      label: Notes / open questions
-      description: Design considerations, edge cases, dependencies.
-
-  - type: textarea
-    id: parent
-    attributes:
-      label: Parent feature / related work
-      placeholder: "Refs #123  (parent Feature)"
