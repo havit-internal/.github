@@ -1,10 +1,10 @@
 name: QA routing
 
 # Reusable workflow — called from a thin wrapper in each consuming repo.
-# Reads the issue numbers listed under the merged PR's "## Verification"
-# section, relabels those issues status:ready-for-qa, and assigns everyone
-# listed in that repo's .github/QAOWNERS. See README.md for the wrapper
-# snippet and QAOWNERS format.
+# Reads the merged PR's body for GitHub's own closing keywords (Closes/Fixes/
+# Resolves #N), relabels those issues status:ready-for-qa, and assigns
+# everyone listed in that repo's .github/QAOWNERS. See README.md for the
+# wrapper snippet and QAOWNERS format.
 
 on:
   workflow_call:
@@ -28,16 +28,21 @@ jobs:
           script: |
             const body = context.payload.pull_request.body || '';
 
-            // Grab everything under "## Verification" up to the next "## " heading (or EOF),
-            // strip HTML comments so template instructions don't get parsed as issue refs,
-            // and pull out every #N in what's left.
-            const sectionMatch = body.match(/^##\s*Verification\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/im);
-            const section = sectionMatch ? sectionMatch[1].replace(/<!--[\s\S]*?-->/g, '') : '';
-            const issueNumbers = [...new Set([...section.matchAll(/#(\d+)/g)]
-              .map(m => parseInt(m[1], 10)))];
+            // Strip HTML comments so template instructions/examples aren't parsed as
+            // issue refs, then pull out issue numbers from GitHub's own closing-keyword
+            // syntax: "Closes/Fixes/Resolves #N" (and comma/"and"-separated lists like
+            // "Closes #10, #11"). The keyword must sit immediately next to the "#N" list,
+            // same as GitHub's own auto-close matching, so prose like "fixes a bug, see
+            // #123" or a plain "Refs #123" cross-link doesn't get swept in.
+            const withoutComments = body.replace(/<!--[\s\S]*?-->/g, '');
+            const closingKeywordRe = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b((?:\s*,?\s*(?:and\s+)?#\d+)+)/gi;
+            const issueNumbers = [...new Set(
+              [...withoutComments.matchAll(closingKeywordRe)]
+                .flatMap(m => [...m[1].matchAll(/#(\d+)/g)].map(n => parseInt(n[1], 10)))
+            )];
 
             if (issueNumbers.length === 0) {
-              core.info('No issue numbers found under the "## Verification" section — nothing to route.');
+              core.info('No Closes/Fixes/Resolves keywords found in the PR body — nothing to route.');
               return;
             }
 
