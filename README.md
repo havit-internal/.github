@@ -17,7 +17,7 @@ health files, and a canonical label set with zero per-repo work.
 │   ├── user_story.yml       ← "As a … so that …" with acceptance criteria
 │   ├── task.yml             ← Implementation slice with definition-of-done
 │   └── config.yml           ← Disables blank issues
-├── pull_request_template.md ← Verify: / Refs — see QA convention below
+├── pull_request_template.md ← Issues / Refs — see QA convention below
 ├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
 └── workflows/
     └── qa-routing.yml        ← Reusable workflow — see "PR convention" below. Label sync / CI still planned.
@@ -87,17 +87,26 @@ workflow does not exist yet, so today this file is documentation only —
 labels must be applied to each repo manually until it's built. Do not create
 ad-hoc labels in individual repos — edit this file and open a PR.
 
-## PR convention: `Verify:` vs `Refs`
+## PR convention: `Closes`/`Fixes`/`Resolves` vs `Refs`
 
-The PR template contains a `Verify:` line. Fill it with the issue number(s)
-this PR fixes — one `Verify: #N` per line, or several numbers on one line.
-On merge, the `qa-routing` workflow (see below) picks these up, relabels the
-issues `status:ready-for-qa`, and assigns everyone in `.github/QAOWNERS`.
+The `qa-routing` workflow (see below) piggybacks on GitHub's own closing
+keywords instead of inventing a separate one. Use `Closes #N`, `Fixes #N`,
+or `Resolves #N` — anywhere in the PR description, one or several
+comma-separated (`Fixes #10, #11`) — for every issue this PR fixes. GitHub
+auto-closes those issues on merge, and the workflow, in the same run,
+relabels them `status:ready-for-qa` and assigns everyone in
+`.github/QAOWNERS`, so the issue doesn't just quietly close — it still gets
+a QA pass.
 
-- `Verify: #N` — This PR fixes issue N. Routed to QA on merge.
-- `Refs #N`   — Related issue, no action. Cross-link only.
-- **Never use** `Closes #N`, `Fixes #N`, or `Resolves #N` — GitHub auto-closes
-  the referenced issue on merge, bypassing the QA verification gate.
+- `Closes #N` / `Fixes #N` / `Resolves #N` — This PR fixes issue N. Closed by
+  GitHub and routed to QA on merge.
+- `Refs #N` — Related issue, no action. Cross-link only, not auto-closed, not
+  routed to QA.
+
+The keyword has to sit immediately next to the issue number(s), same as
+GitHub's own matching — prose like "this fixes a bug, see #123" (keyword not
+adjacent to the `#N`) or a bare `#123` doesn't trigger either the auto-close
+or the QA routing.
 
 ## QA routing workflow
 
@@ -125,7 +134,8 @@ jobs:
 ```
 
 What it does on merge:
-1. Scans the PR body for `Verify: #N` lines. No matches → no-op.
+1. Scans the PR body for `Closes`/`Fixes`/`Resolves #N` references. No
+   matches → no-op.
 2. For each linked issue, strips any existing `status:*` label and adds
    `status:ready-for-qa` (handles the qa-rejected → refix → re-verify loop
    cleanly, since the old status is always replaced, not stacked).
