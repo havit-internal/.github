@@ -4,13 +4,14 @@
 
 ## Verification
 <!--
-  Which issues should QA verify on main after merge? Fill in one number per line,
-  or delete this section if the PR does not fix any tracked issue.
+  Which issues should QA verify on main after merge? List one issue number
+  per line (e.g. "#123"), or delete this section if the PR does not fix any
+  tracked issue.
 
-  Use `Verify:` — NOT `Closes`, `Fixes`, or `Resolves`. Those keywords auto-close
+  Do NOT use `Closes`, `Fixes`, or `Resolves` here — those keywords auto-close
   the referenced issue when the PR merges, which bypasses QA verification.
 -->
-Verify: #
+#
 
 
 ## Related

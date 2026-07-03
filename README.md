@@ -17,7 +17,7 @@ health files, and a canonical label set with zero per-repo work.
 │   ├── user_story.yml       ← "As a … so that …" with acceptance criteria
 │   ├── task.yml             ← Implementation slice with definition-of-done
 │   └── config.yml           ← Disables blank issues
-├── pull_request_template.md ← Verify: / Refs — see QA convention below
+├── pull_request_template.md ← Verification / Refs — see QA convention below
 ├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
 └── workflows/
     └── qa-routing.yml        ← Reusable workflow — see "PR convention" below. Label sync / CI still planned.
@@ -87,15 +87,17 @@ workflow does not exist yet, so today this file is documentation only —
 labels must be applied to each repo manually until it's built. Do not create
 ad-hoc labels in individual repos — edit this file and open a PR.
 
-## PR convention: `Verify:` vs `Refs`
+## PR convention: `Verification` vs `Related`
 
-The PR template contains a `Verify:` line. Fill it with the issue number(s)
-this PR fixes — one `Verify: #N` per line, or several numbers on one line.
-On merge, the `qa-routing` workflow (see below) picks these up, relabels the
-issues `status:ready-for-qa`, and assigns everyone in `.github/QAOWNERS`.
+The PR template has a `## Verification` section. List the issue number(s)
+this PR fixes there — one per line, or several on one line, plain `#N` with
+no keyword needed. On merge, the `qa-routing` workflow (see below) reads
+everything under that heading, relabels the referenced issues
+`status:ready-for-qa`, and assigns everyone in `.github/QAOWNERS`.
 
-- `Verify: #N` — This PR fixes issue N. Routed to QA on merge.
-- `Refs #N`   — Related issue, no action. Cross-link only.
+- Issue number under `## Verification` — This PR fixes that issue. Routed to
+  QA on merge.
+- `Refs #N` under `## Related` — Related issue, no action. Cross-link only.
 - **Never use** `Closes #N`, `Fixes #N`, or `Resolves #N` — GitHub auto-closes
   the referenced issue on merge, bypassing the QA verification gate.
 
@@ -125,7 +127,8 @@ jobs:
 ```
 
 What it does on merge:
-1. Scans the PR body for `Verify: #N` lines. No matches → no-op.
+1. Scans the PR body's `## Verification` section for `#N` issue references.
+   No matches → no-op.
 2. For each linked issue, strips any existing `status:*` label and adds
    `status:ready-for-qa` (handles the qa-rejected → refix → re-verify loop
    cleanly, since the old status is always replaced, not stacked).
