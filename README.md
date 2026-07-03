@@ -13,7 +13,7 @@ health files, and a canonical label set with zero per-repo work.
 .github/
 ├── ISSUE_TEMPLATE/
 │   ├── feature.yml          ← Outcome-level container; rolls up Stories
-│   ├── bug_report.yml       ← "Something broken" — severity + repro required
+│   ├── bug_report.yml       ← "Something broken" — Environment + Details required
 │   ├── user_story.yml       ← "As a … so that …" with acceptance criteria
 │   ├── task.yml             ← Implementation slice with definition-of-done
 │   └── config.yml           ← Disables blank issues
@@ -21,6 +21,9 @@ health files, and a canonical label set with zero per-repo work.
 ├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
 └── workflows/
     └── qa-routing.yml        ← Reusable workflow — see "PR convention" below. Label sync / CI still planned.
+
+plugins/
+└── gh-issue-templates/      ← Claude Code plugin — see "Claude Code plugin" below
 ```
 
 ## Related org repos
@@ -143,6 +146,21 @@ If a repo has no `QAOWNERS` file, the workflow still relabels the issue
 `status:ready-for-qa` but leaves it unassigned (logged as a warning in the
 workflow run) — so repos can adopt this incrementally rather than needing
 `QAOWNERS` set up before merges work at all.
+
+## Claude Code plugin
+
+This repo doubles as a Claude Code plugin marketplace (`.claude-plugin/marketplace.json`).
+It currently ships one plugin, `gh-issue-templates`, with a skill that creates
+GitHub issues matching the actual template a target repo renders (including
+the all-or-nothing inheritance gotcha above) — title prefix, field order,
+labels, and native Issue Type — instead of a freeform title/body.
+
+Install once, works in any repo:
+
+```
+/plugin marketplace add havit-internal/.github
+/plugin install gh-issue-templates
+```
 
 ## Changing something here
 
