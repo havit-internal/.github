@@ -92,6 +92,18 @@ For each non-markdown field, in template order:
 
   ```
   Skip fields with no content (don't emit an empty heading).
+- Footer: always append an authorship note as the last line of the body,
+  identifying the actual AI client running this skill — do not hardcode
+  "Claude Code" if you are a different client:
+  ```
+
+  ---
+  🤖 Authored by an AI assistant (<client name>) via the `gh-issue-templates` plugin.
+  ```
+  If you know the requesting GitHub user, append `Requested by @<login>.` on
+  its own line below that. This note is not optional and is not something to
+  ask the user about — always include it so anyone reading the issue knows
+  it wasn't typed by a human.
 
 ## 7. Confirm before creating
 
