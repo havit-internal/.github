@@ -162,8 +162,8 @@ workflow run) — so repos can adopt this incrementally rather than needing
 This repo doubles as a Claude Code plugin marketplace (`.claude-plugin/marketplace.json`).
 It currently ships one plugin, `gh-issue-templates`, with a skill that creates
 GitHub issues matching the actual template a target repo renders (including
-the all-or-nothing inheritance gotcha above) — title prefix, field order,
-labels, and native Issue Type — instead of a freeform title/body.
+the all-or-nothing inheritance gotcha above) — field order, labels, and
+native Issue Type — instead of a freeform title/body.
 
 Install once, works in any repo:
 

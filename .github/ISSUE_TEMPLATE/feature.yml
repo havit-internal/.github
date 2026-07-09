@@ -1,6 +1,5 @@
 name: Feature
 description: Outcome-level work that will be broken down into Stories
-title: "[Feature] "
 type: feature
 labels:
   - "needs-triage"
