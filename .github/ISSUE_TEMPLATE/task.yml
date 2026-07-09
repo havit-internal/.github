@@ -1,6 +1,5 @@
 name: Task
 description: An implementation slice — a piece of a Story
-title: "[Task] "
 type: task
 body:
   - type: markdown

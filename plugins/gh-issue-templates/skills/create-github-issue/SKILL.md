@@ -57,7 +57,6 @@ the API call.
 
 From the fetched YAML, extract:
 
-- `title:` — prefix to prepend to the issue title (e.g. `"[Bug] "`)
 - `type:` — the native GitHub Issue Type to set (e.g. `bug`, `task`, `story`, `feature`)
 - `labels:` — list of labels to apply (e.g. `needs-triage`)
 - `body:` — the ordered list of fields. For each entry with `type: input` or
@@ -82,8 +81,9 @@ For each non-markdown field, in template order:
 
 ## 6. Compose title and body
 
-- Title: template `title:` prefix + a concise summary (from the user, or the
-  first line of the main field).
+- Title: a concise summary (from the user, or the first line of the main
+  field) — no prefix; the native Issue Type set in step 8 already conveys
+  bug/task/story/feature.
 - Body: for each field with content, in template order:
   ```
   ### <label>

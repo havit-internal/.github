@@ -1,6 +1,5 @@
 name: User story
 description: A user-facing slice of work
-title: "[Story] "
 type: story
 labels:
   - "needs-triage"

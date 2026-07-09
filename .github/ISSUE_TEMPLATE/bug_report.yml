@@ -1,6 +1,5 @@
 name: Bug report
 description: Something broken in dev, staging, or production
-title: "[Bug] "
 type: bug
 labels:
   - "needs-triage"
