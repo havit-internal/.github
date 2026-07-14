@@ -42,6 +42,7 @@ jobs:
                         number
                         repository { nameWithOwner }
                       }
+                      pageInfo { hasNextPage }
                     }
                   }
                 }
@@ -53,7 +54,11 @@ jobs:
               }
             );
 
-            const refs = repository.pullRequest.closingIssuesReferences.nodes;
+            const closingIssues = repository.pullRequest.closingIssuesReferences;
+            if (closingIssues.pageInfo.hasNextPage) {
+              core.warning('This PR has more than 50 closing issue references; only the first 50 are routed to QA.');
+            }
+            const refs = closingIssues.nodes;
             const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
             const crossRepo = refs.filter(r => r.repository.nameWithOwner !== sameRepo);
             if (crossRepo.length > 0) {
