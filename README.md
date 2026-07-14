@@ -98,15 +98,18 @@ relabels them `status:ready-for-qa` and assigns everyone in
 `.github/QAOWNERS`, so the issue doesn't just quietly close — it still gets
 a QA pass.
 
-- `Closes #N` / `Fixes #N` / `Resolves #N` — This PR fixes issue N. Closed by
-  GitHub and routed to QA on merge.
-- `Refs #N` — Related issue, no action. Cross-link only, not auto-closed, not
-  routed to QA.
+You don't have to type a keyword at all — linking an issue via the PR's
+**Development** panel (the "Link a pull request"/"Link an issue" UI) works
+identically. The workflow reads GitHub's own resolved `closingIssuesReferences`
+for the PR, the same data that panel displays, so a manually linked issue is
+picked up exactly like a `Fixes #N` in the text — no body parsing involved.
 
-The keyword has to sit immediately next to the issue number(s), same as
-GitHub's own matching — prose like "this fixes a bug, see #123" (keyword not
-adjacent to the `#N`) or a bare `#123` doesn't trigger either the auto-close
-or the QA routing.
+- `Closes #N` / `Fixes #N` / `Resolves #N` in the body, **or** a manual link
+  in the Development panel — This PR fixes issue N. Closed by GitHub and
+  routed to QA on merge.
+- `Refs #N` — Related issue, no action. Cross-link only, not auto-closed, not
+  routed to QA (plain text mentions never appear in `closingIssuesReferences`
+  unless linked one of the two ways above).
 
 ## QA routing workflow
 
@@ -126,6 +129,7 @@ jobs:
     if: github.event.pull_request.merged == true
     permissions:
       issues: write
+      pull-requests: read
       contents: read
     uses: havit-internal/.github/.github/workflows/qa-routing.yml@main
     with:
@@ -134,7 +138,9 @@ jobs:
 ```
 
 What it does on merge:
-1. Scans the PR body for `Closes`/`Fixes`/`Resolves #N` references. No
+1. Reads the PR's `closingIssuesReferences` (GraphQL) — the same resolved
+   list GitHub shows in the PR's Development panel, covering both
+   `Closes`/`Fixes`/`Resolves #N` text and manually linked issues. No
    matches → no-op.
 2. For each linked issue, strips any existing `status:*` label and adds
    `status:ready-for-qa` (handles the qa-rejected → refix → re-verify loop

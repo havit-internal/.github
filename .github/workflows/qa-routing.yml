@@ -1,10 +1,12 @@
 name: QA routing
 
 # Reusable workflow — called from a thin wrapper in each consuming repo.
-# Reads the merged PR's body for GitHub's own closing keywords (Closes/Fixes/
-# Resolves #N), relabels those issues status:ready-for-qa, and assigns
-# everyone listed in that repo's .github/QAOWNERS. See README.md for the
-# wrapper snippet and QAOWNERS format.
+# Reads the merged PR's "closing issues" — the same set GitHub computes for
+# the PR's Development panel, whether linked via a Closes/Fixes/Resolves #N
+# keyword in the body OR via the manual "link a pull request" UI — relabels
+# those issues status:ready-for-qa, and assigns everyone listed in that
+# repo's .github/QAOWNERS. See README.md for the wrapper snippet and
+# QAOWNERS format.
 
 on:
   workflow_call:
@@ -16,6 +18,7 @@ on:
 
 permissions:
   issues: write
+  pull-requests: read
   contents: read
 
 jobs:
@@ -26,23 +29,47 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const body = context.payload.pull_request.body || '';
+            // closingIssuesReferences is GitHub's own resolved list of issues this PR
+            // closes on merge — the same data backing the PR's "Development" panel.
+            // It's populated from both Closes/Fixes/Resolves #N text and issues linked
+            // manually via that panel's UI, so there's no body text to parse here.
+            const { repository } = await github.graphql(
+              `query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 50) {
+                      nodes {
+                        number
+                        repository { nameWithOwner }
+                      }
+                      pageInfo { hasNextPage }
+                    }
+                  }
+                }
+              }`,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                number: context.payload.pull_request.number,
+              }
+            );
 
-            // Strip HTML comments so template instructions/examples aren't parsed as
-            // issue refs, then pull out issue numbers from GitHub's own closing-keyword
-            // syntax: "Closes/Fixes/Resolves #N" (and comma/"and"-separated lists like
-            // "Closes #10, #11"). The keyword must sit immediately next to the "#N" list,
-            // same as GitHub's own auto-close matching, so prose like "fixes a bug, see
-            // #123" or a plain "Refs #123" cross-link doesn't get swept in.
-            const withoutComments = body.replace(/<!--[\s\S]*?-->/g, '');
-            const closingKeywordRe = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b((?:\s*,?\s*(?:and\s+)?#\d+)+)/gi;
+            const closingIssues = repository.pullRequest.closingIssuesReferences;
+            if (closingIssues.pageInfo.hasNextPage) {
+              core.warning('This PR has more than 50 closing issue references; only the first 50 are routed to QA.');
+            }
+            const refs = closingIssues.nodes;
+            const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const crossRepo = refs.filter(r => r.repository.nameWithOwner !== sameRepo);
+            if (crossRepo.length > 0) {
+              core.warning(`Skipping closing reference(s) in other repos (not supported by this workflow): ${crossRepo.map(r => `${r.repository.nameWithOwner}#${r.number}`).join(', ')}`);
+            }
             const issueNumbers = [...new Set(
-              [...withoutComments.matchAll(closingKeywordRe)]
-                .flatMap(m => [...m[1].matchAll(/#(\d+)/g)].map(n => parseInt(n[1], 10)))
+              refs.filter(r => r.repository.nameWithOwner === sameRepo).map(r => r.number)
             )];
 
             if (issueNumbers.length === 0) {
-              core.info('No Closes/Fixes/Resolves keywords found in the PR body — nothing to route.');
+              core.info('No closing issue references found (via body keywords or the Development panel) — nothing to route.');
               return;
             }
 
