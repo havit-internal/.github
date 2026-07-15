@@ -87,16 +87,23 @@ workflow does not exist yet, so today this file is documentation only —
 labels must be applied to each repo manually until it's built. Do not create
 ad-hoc labels in individual repos — edit this file and open a PR.
 
+**Note:** the `status:*` labels here (`in-progress`/`in-review`/`ready-for-qa`/
+`qa-rejected`) now overlap with the org-wide **Work-status** issue field
+(`Backlog`/`Ready`/`In-progress`/`In-review`/`Ready for QA`/`Done`) that
+`qa-routing` writes to (see below) — the two aren't kept in sync with each
+other. Worth deciding separately whether `status:*` should be retired in
+favor of Work-status.
+
 ## PR convention: `Closes`/`Fixes`/`Resolves` vs `Refs`
 
 The `qa-routing` workflow (see below) piggybacks on GitHub's own closing
 keywords instead of inventing a separate one. Use `Closes #N`, `Fixes #N`,
 or `Resolves #N` — anywhere in the PR description, one or several
 comma-separated (`Fixes #10, #11`) — for every issue this PR fixes. GitHub
-auto-closes those issues on merge, and the workflow, in the same run,
-relabels them `status:ready-for-qa` and assigns everyone in
-`.github/QAOWNERS`, so the issue doesn't just quietly close — it still gets
-a QA pass.
+auto-closes those issues on merge, and the workflow, in the same run, sets
+the org-wide **Work-status** issue field to **Ready for QA** and assigns
+everyone in `.github/QAOWNERS`, so the issue doesn't just quietly close —
+it still gets a QA pass.
 
 You don't have to type a keyword at all — linking an issue via the PR's
 **Development** panel (the "Link a pull request"/"Link an issue" UI) works
@@ -142,9 +149,11 @@ What it does on merge:
    list GitHub shows in the PR's Development panel, covering both
    `Closes`/`Fixes`/`Resolves #N` text and manually linked issues. No
    matches → no-op.
-2. For each linked issue, strips any existing `status:*` label and adds
-   `status:ready-for-qa` (handles the qa-rejected → refix → re-verify loop
-   cleanly, since the old status is always replaced, not stacked).
+2. For each linked issue, sets the org-wide **Work-status** issue field
+   (single select) to **Ready for QA** via the `setIssueFieldValue` GraphQL
+   mutation — a single-select field only ever holds one value, so this
+   always replaces whatever Work-status was there before (no stacking,
+   unlike labels).
 3. Assigns **everyone** listed in that repo's `.github/QAOWNERS` — see below.
 4. Leaves a comment on the issue linking back to the merged PR.
 
@@ -158,10 +167,18 @@ ignored:
 @bob
 ```
 
-If a repo has no `QAOWNERS` file, the workflow still relabels the issue
-`status:ready-for-qa` but leaves it unassigned (logged as a warning in the
+If a repo has no `QAOWNERS` file, the workflow still sets Work-status to
+Ready for QA but leaves the issue unassigned (logged as a warning in the
 workflow run) — so repos can adopt this incrementally rather than needing
 `QAOWNERS` set up before merges work at all.
+
+**Work-status field IDs:** the workflow references the `Work-status` field
+and its `Ready for QA` option by GraphQL node ID (single-select fields are
+set by option ID, not name). Those IDs are hardcoded as constants in
+`qa-routing.yml` — if the field or option is ever deleted and recreated
+(even with the same name), it gets new IDs and the workflow needs updating.
+Look them up via `repository.issueFields` for any repo in the org (the field
+is org-wide, so it shows up the same everywhere).
 
 ## Claude Code plugin
 
