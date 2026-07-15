@@ -1,8 +1,10 @@
 # Canonical label set for the havit-internal organization.
 #
-# This file is the source of truth. A label-sync workflow (in
-# havit-internal/.github-workflows) reads it and reconciles every repo's
-# label set on a schedule and on push to main.
+# This file is the source of truth. Planned: a scheduled label-sync workflow,
+# living in this repo's own .github/workflows/, will read it and reconcile
+# every repo's label set. That workflow does not exist yet, so today this
+# file is documentation only — labels must be applied to each repo manually
+# until it's built. See README.md ("Label sync").
 #
 # Format is compatible with `micnncim/action-label-syncer` and
 # `EndBug/label-sync`. Colors are 6-char hex without the `#`.
