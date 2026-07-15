@@ -3,10 +3,10 @@ name: QA routing
 # Reusable workflow — called from a thin wrapper in each consuming repo.
 # Reads the merged PR's "closing issues" — the same set GitHub computes for
 # the PR's Development panel, whether linked via a Closes/Fixes/Resolves #N
-# keyword in the body OR via the manual "link a pull request" UI — relabels
-# those issues status:ready-for-qa, and assigns everyone listed in that
-# repo's .github/QAOWNERS. See README.md for the wrapper snippet and
-# QAOWNERS format.
+# keyword in the body OR via the manual "link a pull request" UI — sets the
+# org-wide "Work-status" issue field to "Ready for QA" on those issues, and
+# assigns everyone listed in that repo's .github/QAOWNERS. See README.md for
+# the wrapper snippet and QAOWNERS format.
 
 on:
   workflow_call:
@@ -25,7 +25,7 @@ jobs:
   route-to-qa:
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
-      - name: Relabel and assign linked issues to QA
+      - name: Set QA field and assign linked issues
         uses: actions/github-script@v7
         with:
           script: |
@@ -88,11 +88,20 @@ jobs:
                 .map(l => l.replace(/^@/, ''));
             } catch (err) {
               if (err.status === 404) {
-                core.warning('No .github/QAOWNERS file in this repo — issues will be relabeled but left unassigned.');
+                core.warning('No .github/QAOWNERS file in this repo — Work-status will be set but issues left unassigned.');
               } else {
                 throw err;
               }
             }
+
+            // Org-wide "Work-status" issue field (single select) and its "Ready for QA"
+            // option. These are node IDs, not names — GraphQL single-select fields are
+            // set by option ID, not by string. Looked up via repository.issueFields for
+            // havit-internal/.github; re-fetch and update these two constants if the
+            // field or option is ever recreated (a recreate mints new IDs even if the
+            // name is unchanged).
+            const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
+            const READY_FOR_QA_OPTION_ID = 'IFSSO_kgDOBJz3hA';
 
             for (const issue_number of issueNumbers) {
               try {
@@ -102,16 +111,21 @@ jobs:
                   issue_number,
                 });
 
-                const keepLabels = issue.labels
-                  .map(l => (typeof l === 'string' ? l : l.name))
-                  .filter(name => !name.startsWith('status:'));
-
-                await github.rest.issues.setLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number,
-                  labels: [...keepLabels, 'status:ready-for-qa'],
-                });
+                await github.graphql(
+                  `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
+                    setIssueFieldValue(input: {
+                      issueId: $issueId,
+                      issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
+                    }) {
+                      issue { id }
+                    }
+                  }`,
+                  {
+                    issueId: issue.node_id,
+                    fieldId: WORK_STATUS_FIELD_ID,
+                    optionId: READY_FOR_QA_OPTION_ID,
+                  }
+                );
 
                 if (qaOwners.length > 0) {
                   await github.rest.issues.addAssignees({
