@@ -1,0 +1,99 @@
+name: Label sync
+
+# Not a reusable workflow — this one runs centrally, only here in
+# havit-internal/.github, and pushes .github/labels.yml out to every repo in
+# the org. No per-repo wrapper needed ("zero per-repo work", per the README).
+#
+# Non-destructive: creates missing labels and updates the color/description
+# of existing ones that match by name, but never deletes/touches labels that
+# aren't in labels.yml. Repos that added their own ad-hoc labels keep them.
+#
+# Needs an org-level secret ORG_LABEL_SYNC_TOKEN — a fine-grained PAT (or
+# GitHub App token) with Issues: Read and write access across all repos in
+# the org. The default GITHUB_TOKEN can't be used here: it's scoped only to
+# the repo the workflow runs in, and this workflow writes to every other
+# repo in the org. See README.md ("Label sync") for how to set it up.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/labels.yml'
+  schedule:
+    - cron: '17 6 * * 1' # weekly Monday — catches repos created since the last sync
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Convert labels.yml to JSON
+        run: yq -o=json '.' .github/labels.yml > /tmp/labels.json
+
+      - name: Sync labels to every repo in the org
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ORG_LABEL_SYNC_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const labels = JSON.parse(fs.readFileSync('/tmp/labels.json', 'utf8'));
+            const org = context.repo.owner;
+
+            const repos = (await github.paginate(github.rest.repos.listForOrg, {
+              org,
+              type: 'all',
+              per_page: 100,
+            })).filter(r => !r.archived && !r.disabled);
+
+            core.info(`Syncing ${labels.length} labels to ${repos.length} repos in ${org}.`);
+
+            for (const repo of repos) {
+              let existing;
+              try {
+                existing = await github.paginate(github.rest.issues.listLabelsForRepo, {
+                  owner: org,
+                  repo: repo.name,
+                  per_page: 100,
+                });
+              } catch (err) {
+                core.warning(`${repo.name}: could not list labels — ${err.message}`);
+                continue;
+              }
+              const existingByName = new Map(existing.map(l => [l.name.toLowerCase(), l]));
+
+              for (const label of labels) {
+                const current = existingByName.get(label.name.toLowerCase());
+                try {
+                  if (!current) {
+                    await github.rest.issues.createLabel({
+                      owner: org,
+                      repo: repo.name,
+                      name: label.name,
+                      color: label.color,
+                      description: label.description || '',
+                    });
+                    core.info(`${repo.name}: created "${label.name}"`);
+                  } else if (
+                    current.color !== label.color ||
+                    (current.description || '') !== (label.description || '')
+                  ) {
+                    await github.rest.issues.updateLabel({
+                      owner: org,
+                      repo: repo.name,
+                      name: current.name,
+                      new_name: label.name,
+                      color: label.color,
+                      description: label.description || '',
+                    });
+                    core.info(`${repo.name}: updated "${label.name}"`);
+                  }
+                } catch (err) {
+                  core.warning(`${repo.name}: could not sync label "${label.name}" — ${err.message}`);
+                }
+              }
+            }
