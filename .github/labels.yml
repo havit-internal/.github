@@ -54,7 +54,7 @@
 
 - name: "skip-qa"
   color: "5319e7"
-  description: "No QA needed (e.g. purely technical work) — qa-routing sets Work-status straight to Done on merge instead of Ready for QA"
+  description: "No QA needed — qa-routing sets Work-status straight to Done on merge"
 
 - name: "blocked"
   color: "000000"
