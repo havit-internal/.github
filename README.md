@@ -183,7 +183,7 @@ workflow run) — so repos can adopt this incrementally rather than needing
 
 **Work-status field IDs:** the workflow references the `Work-status` field
 and its `Ready for QA` and `Done` options (the latter used by the `skip-qa`
-path below) by GraphQL node ID (single-select fields are set by option ID,
+path above) by GraphQL node ID (single-select fields are set by option ID,
 not name). Those IDs are hardcoded as constants in `qa-routing.yml` — if the
 field or an option is ever deleted and recreated (even with the same name),
 it gets new IDs and the workflow needs updating. Look them up via
