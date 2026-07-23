@@ -84,6 +84,7 @@ jobs:
                     repository(owner: $owner, name: $repo) {
                       issue(number: $number) {
                         id
+                        state
                         issueFieldValues(first: 20) {
                           nodes {
                             ... on IssueFieldSingleSelectValue {
@@ -102,10 +103,20 @@ jobs:
                   }
                 );
 
+                if (issueRepo.issue.state === 'CLOSED') {
+                  core.info(`Issue #${issue_number} is closed — not touching Work-status.`);
+                  continue;
+                }
+
                 const workStatusValue = issueRepo.issue.issueFieldValues.nodes.find(
                   n => n.field && n.field.name === 'Work-status'
                 );
                 const currentStatus = workStatusValue ? workStatusValue.name : null;
+
+                if (currentStatus === 'In-progress') {
+                  core.info(`Issue #${issue_number} Work-status is already In-progress — nothing to do.`);
+                  continue;
+                }
 
                 if (SKIP_IF_STATUS.includes(currentStatus)) {
                   core.info(`Issue #${issue_number} Work-status is already "${currentStatus}" — not moving it back to In-progress.`);
