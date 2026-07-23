@@ -20,9 +20,10 @@ health files, and a canonical label set with zero per-repo work.
 ├── pull_request_template.md ← Issues / Refs — see QA convention below
 ├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
 └── workflows/
-    ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below. Label sync / CI still planned.
+    ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below.
     ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work-status Done, both directions
-    └── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work-status In-progress
+    ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work-status In-progress
+    └── label-sync.yml        ← Runs centrally — see "Label sync" below. CI still planned.
 
 plugins/
 └── gh-issue-templates/      ← Claude Code plugin — see "Claude Code plugin" below
@@ -32,7 +33,7 @@ plugins/
 
 | Repo | Role |
 |------|------|
-| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml` built; label sync and CI still planned). |
+| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `.github/labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml`, `issue-status-sync.yml`, `pr-linked-status.yml`, and `label-sync.yml` built; CI still planned). |
 | `havit-internal/002.HFW-NewProjectTemplate-Blazor` | GitHub template repo for new Blazor projects. Not org-wide — covers the Blazor stack specifically, not every repo type. |
 
 Templates from this repo are **inherited** by every repo in the org that does
@@ -81,13 +82,42 @@ and triage/meta labels.
 
 ## Label sync
 
-`labels.yml` is the canonical list for severity (`sev:*`), status (`status:*`),
-and meta labels (`needs-triage`, `blocked`, etc.) — everything that isn't a
-work type. **Planned:** a scheduled label-sync workflow, living in this
-repo's own `.github/workflows/`, will apply it to every repo in the org. That
-workflow does not exist yet, so today this file is documentation only —
-labels must be applied to each repo manually until it's built. Do not create
-ad-hoc labels in individual repos — edit this file and open a PR.
+`.github/labels.yml` is the canonical list for severity (`sev:*`), status (`status:*`),
+and meta labels (`needs-triage`, `blocked`, `skip-qa`, etc.) — everything
+that isn't a work type. `.github/workflows/label-sync.yml` applies it to
+every repo in the org automatically — on push to `main` when
+`.github/labels.yml` changes, on a weekly schedule (catches repos created
+since the last sync), and on demand (`workflow_dispatch`). Do not create
+ad-hoc labels in individual repos — edit this file and open a PR here
+instead.
+
+Unlike the other workflows in this repo, `label-sync.yml` is **not**
+reusable / per-repo-opt-in — it runs centrally, only here, and pushes out to
+every repo in the org. No wrapper needed anywhere else.
+
+It's **non-destructive**: creates labels that don't exist yet in a repo, and
+updates the color/description of ones that already match by name, but never
+deletes or otherwise touches a label that isn't in `.github/labels.yml` — a
+repo's own ad-hoc labels are left alone.
+
+It needs an org-level secret, **`ORG_LABEL_SYNC_TOKEN`** — a fine-grained
+PAT (or GitHub App token) with **Issues: Read and write** across *all
+repositories* in the org. The default `GITHUB_TOKEN` won't work here: it's
+scoped only to the repo the workflow runs in, and this workflow writes
+labels to every other repo in the org. To set it up:
+
+1. Create a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new).
+   Resource owner: `havit-internal`. Repository access: **All repositories**
+   (so newly created repos are covered without reconfiguring the token).
+   Permissions → Repository permissions → **Issues: Read and write**.
+2. If the org requires approval for fine-grained PATs, an org owner needs to
+   approve it before it's usable.
+3. Add it as an **organization-level** Actions secret (Org Settings →
+   Secrets and variables → Actions → New organization secret), named
+   `ORG_LABEL_SYNC_TOKEN`, with repository access limited to
+   `havit-internal/.github` (the only repo that needs it).
+4. Fine-grained PATs expire (max 1 year) — note the expiry and plan to
+   rotate it, or move to a GitHub App later if this becomes long-lived.
 
 **Note:** the `status:*` labels here (`in-progress`/`in-review`/`ready-for-qa`/
 `qa-rejected`) now overlap with the org-wide **Work-status** issue field
