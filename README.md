@@ -153,9 +153,18 @@ What it does on merge:
    (single select) to **Ready for QA** via the `setIssueFieldValue` GraphQL
    mutation — a single-select field only ever holds one value, so this
    always replaces whatever Work-status was there before (no stacking,
-   unlike labels).
-3. Assigns **everyone** listed in that repo's `.github/QAOWNERS` — see below.
+   unlike labels). **Exception:** an issue labeled `skip-qa` goes straight
+   to **Done** and gets closed instead — see below.
+3. Assigns **everyone** listed in that repo's `.github/QAOWNERS` — see below
+   (skipped for `skip-qa` issues, since there's no QA pass to assign).
 4. Leaves a comment on the issue linking back to the merged PR.
+
+**`skip-qa` label:** for issues with nothing for a tester to verify (purely
+technical work — refactors, dependency bumps, internal tooling). Label the
+issue `skip-qa` *before* the PR merges, and `qa-routing` sets Work-status
+straight to **Done** and closes the issue itself, instead of Ready for QA
+plus a QAOWNERS assignment. `skip-qa` is defined in `labels.yml` alongside
+the other meta labels.
 
 **`.github/QAOWNERS` format** (lives in each consuming repo, not here):
 one GitHub username per line, `@` optional, `#` for comments, blank lines
@@ -173,12 +182,13 @@ workflow run) — so repos can adopt this incrementally rather than needing
 `QAOWNERS` set up before merges work at all.
 
 **Work-status field IDs:** the workflow references the `Work-status` field
-and its `Ready for QA` option by GraphQL node ID (single-select fields are
-set by option ID, not name). Those IDs are hardcoded as constants in
-`qa-routing.yml` — if the field or option is ever deleted and recreated
-(even with the same name), it gets new IDs and the workflow needs updating.
-Look them up via `repository.issueFields` for any repo in the org (the field
-is org-wide, so it shows up the same everywhere).
+and its `Ready for QA` and `Done` options (the latter used by the `skip-qa`
+path above) by GraphQL node ID (single-select fields are set by option ID,
+not name). Those IDs are hardcoded as constants in `qa-routing.yml` — if the
+field or an option is ever deleted and recreated (even with the same name),
+it gets new IDs and the workflow needs updating. Look them up via
+`repository.issueFields` for any repo in the org (the field is org-wide, so
+it shows up the same everywhere).
 
 ## Claude Code plugin
 
