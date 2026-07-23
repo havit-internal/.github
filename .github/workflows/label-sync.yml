@@ -32,6 +32,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify ORG_LABEL_SYNC_TOKEN secret is configured
+        env:
+          TOKEN: ${{ secrets.ORG_LABEL_SYNC_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::ORG_LABEL_SYNC_TOKEN organization secret is missing or empty — see README.md (\"Label sync\") for how to create and scope it. Nothing was synced."
+            exit 1
+          fi
+
       - name: Convert labels.yml to JSON
         run: yq -o=json '.' .github/labels.yml > /tmp/labels.json
 

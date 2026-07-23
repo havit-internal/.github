@@ -21,7 +21,7 @@ health files, and a canonical label set with zero per-repo work.
 ├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
 └── workflows/
     ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below.
-    └── label-sync.yml        ← Runs centrally — see "Label sync" above. CI still planned.
+    └── label-sync.yml        ← Runs centrally — see "Label sync" below. CI still planned.
 
 plugins/
 └── gh-issue-templates/      ← Claude Code plugin — see "Claude Code plugin" below
@@ -31,7 +31,7 @@ plugins/
 
 | Repo | Role |
 |------|------|
-| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml` and `label-sync.yml` built; CI still planned). |
+| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `.github/labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml` and `label-sync.yml` built; CI still planned). |
 | `havit-internal/002.HFW-NewProjectTemplate-Blazor` | GitHub template repo for new Blazor projects. Not org-wide — covers the Blazor stack specifically, not every repo type. |
 
 Templates from this repo are **inherited** by every repo in the org that does
@@ -80,13 +80,14 @@ and triage/meta labels.
 
 ## Label sync
 
-`labels.yml` is the canonical list for severity (`sev:*`), status (`status:*`),
+`.github/labels.yml` is the canonical list for severity (`sev:*`), status (`status:*`),
 and meta labels (`needs-triage`, `blocked`, `skip-qa`, etc.) — everything
 that isn't a work type. `.github/workflows/label-sync.yml` applies it to
-every repo in the org automatically — on push to `main` when `labels.yml`
-changes, on a weekly schedule (catches repos created since the last sync),
-and on demand (`workflow_dispatch`). Do not create ad-hoc labels in
-individual repos — edit this file and open a PR here instead.
+every repo in the org automatically — on push to `main` when
+`.github/labels.yml` changes, on a weekly schedule (catches repos created
+since the last sync), and on demand (`workflow_dispatch`). Do not create
+ad-hoc labels in individual repos — edit this file and open a PR here
+instead.
 
 Unlike the other workflows in this repo, `label-sync.yml` is **not**
 reusable / per-repo-opt-in — it runs centrally, only here, and pushes out to
@@ -94,8 +95,8 @@ every repo in the org. No wrapper needed anywhere else.
 
 It's **non-destructive**: creates labels that don't exist yet in a repo, and
 updates the color/description of ones that already match by name, but never
-deletes or otherwise touches a label that isn't in `labels.yml` — a repo's
-own ad-hoc labels are left alone.
+deletes or otherwise touches a label that isn't in `.github/labels.yml` — a
+repo's own ad-hoc labels are left alone.
 
 It needs an org-level secret, **`ORG_LABEL_SYNC_TOKEN`** — a fine-grained
 PAT (or GitHub App token) with **Issues: Read and write** across *all
