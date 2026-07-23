@@ -1,13 +1,8 @@
 # Canonical label set for the havit-internal organization.
 #
-# This file is the source of truth. Planned: a scheduled label-sync workflow,
-# living in this repo's own .github/workflows/, will read it and reconcile
-# every repo's label set. That workflow does not exist yet, so today this
-# file is documentation only — labels must be applied to each repo manually
-# until it's built. See README.md ("Label sync").
-#
-# Format is compatible with `micnncim/action-label-syncer` and
-# `EndBug/label-sync`. Colors are 6-char hex without the `#`.
+# This file is the source of truth — .github/workflows/label-sync.yml reads it
+# and reconciles every repo's label set automatically. See README.md
+# ("Label sync"). Colors are 6-char hex without the `#`.
 
 # Work type (feature / story / task / bug) is NOT tracked here — it's handled
 # by GitHub's native org-level Issue Types (Settings → Issue types), which
@@ -29,23 +24,6 @@
 - name: "sev:4"
   color: "c5def5"
   description: "Cosmetic / low impact"
-
-# ─── Status (the workflow gate) ─────────────────────────────────────────
-- name: "status:in-progress"
-  color: "0969da"
-  description: "Being worked on"
-
-- name: "status:in-review"
-  color: "8250df"
-  description: "PR open, awaiting code review"
-
-- name: "status:ready-for-qa"
-  color: "9a6700"
-  description: "Merged to main; QA to verify"
-
-- name: "status:qa-rejected"
-  color: "cf222e"
-  description: "QA rejected; back to developer"
 
 # ─── Meta / triage ──────────────────────────────────────────────────────
 - name: "needs-triage"
