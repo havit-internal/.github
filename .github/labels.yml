@@ -52,6 +52,10 @@
   color: "e6e6e6"
   description: "New issue — needs labels and assignee"
 
+- name: "skip-qa"
+  color: "5319e7"
+  description: "No QA needed (e.g. purely technical work) — qa-routing sets Work-status straight to Done on merge instead of Ready for QA"
+
 - name: "blocked"
   color: "000000"
   description: "Blocked by something external"

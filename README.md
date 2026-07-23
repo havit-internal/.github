@@ -153,9 +153,18 @@ What it does on merge:
    (single select) to **Ready for QA** via the `setIssueFieldValue` GraphQL
    mutation — a single-select field only ever holds one value, so this
    always replaces whatever Work-status was there before (no stacking,
-   unlike labels).
-3. Assigns **everyone** listed in that repo's `.github/QAOWNERS` — see below.
+   unlike labels). **Exception:** an issue labeled `skip-qa` goes straight
+   to **Done** and gets closed instead — see below.
+3. Assigns **everyone** listed in that repo's `.github/QAOWNERS` — see below
+   (skipped for `skip-qa` issues, since there's no QA pass to assign).
 4. Leaves a comment on the issue linking back to the merged PR.
+
+**`skip-qa` label:** for issues with nothing for a tester to verify (purely
+technical work — refactors, dependency bumps, internal tooling). Label the
+issue `skip-qa` *before* the PR merges, and `qa-routing` sets Work-status
+straight to **Done** and closes the issue itself, instead of Ready for QA
+plus a QAOWNERS assignment. `skip-qa` is defined in `labels.yml` alongside
+the other meta labels.
 
 **`.github/QAOWNERS` format** (lives in each consuming repo, not here):
 one GitHub username per line, `@` optional, `#` for comments, blank lines

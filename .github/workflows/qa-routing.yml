@@ -94,14 +94,20 @@ jobs:
               }
             }
 
-            // Org-wide "Work-status" issue field (single select) and its "Ready for QA"
-            // option. These are node IDs, not names — GraphQL single-select fields are
-            // set by option ID, not by string. Looked up via repository.issueFields for
-            // havit-internal/.github; re-fetch and update these two constants if the
-            // field or option is ever recreated (a recreate mints new IDs even if the
-            // name is unchanged).
+            // Org-wide "Work-status" issue field (single select) and its options.
+            // These are node IDs, not names — GraphQL single-select fields are set
+            // by option ID, not by string. Looked up via repository.issueFields for
+            // havit-internal/.github; re-fetch and update these constants if the
+            // field or an option is ever recreated (a recreate mints new IDs even
+            // if the name is unchanged).
             const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
             const READY_FOR_QA_OPTION_ID = 'IFSSO_kgDOBJz3hA';
+            const DONE_OPTION_ID = 'IFSSO_kgDOBJz3hQ';
+
+            // Issues labeled "skip-qa" (purely technical work, nothing for a tester
+            // to verify) go straight to Done instead of Ready for QA, and don't get
+            // QAOWNERS assigned.
+            const SKIP_QA_LABEL = 'skip-qa';
 
             for (const issue_number of issueNumbers) {
               try {
@@ -110,6 +116,10 @@ jobs:
                   repo: context.repo.repo,
                   issue_number,
                 });
+
+                const skipQa = issue.labels.some(
+                  l => (typeof l === 'string' ? l : l.name) === SKIP_QA_LABEL
+                );
 
                 await github.graphql(
                   `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
@@ -123,9 +133,28 @@ jobs:
                   {
                     issueId: issue.node_id,
                     fieldId: WORK_STATUS_FIELD_ID,
-                    optionId: READY_FOR_QA_OPTION_ID,
+                    optionId: skipQa ? DONE_OPTION_ID : READY_FOR_QA_OPTION_ID,
                   }
                 );
+
+                if (skipQa) {
+                  if (issue.state !== 'closed') {
+                    await github.rest.issues.update({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number,
+                      state: 'closed',
+                      state_reason: 'completed',
+                    });
+                  }
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number,
+                    body: `Merged in #${context.payload.pull_request.number} — has the \`${SKIP_QA_LABEL}\` label, so it skipped QA and went straight to Done.`,
+                  });
+                  continue;
+                }
 
                 if (qaOwners.length > 0) {
                   await github.rest.issues.addAssignees({
