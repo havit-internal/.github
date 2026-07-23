@@ -1,0 +1,134 @@
+name: PR-linked issue status
+
+# Reusable workflow — called from a thin wrapper in each consuming repo.
+# When a PR is linked to an issue (via a Closes/Fixes/Resolves #N keyword or
+# the manual "link a pull request" UI), sets that issue's org-wide
+# "Work-status" field to In-progress — unless it's already further along
+# (Ready for QA or Done), so this never walks status backward.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]'
+        type: string
+        default: '["ubuntu-latest"]'
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - name: Set Work-status to In-progress on linked issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Org-wide "Work-status" issue field (single select) and its
+            // "In-progress" option. Node IDs, not names — see qa-routing.yml for
+            // how these were looked up and when they'd need refreshing.
+            const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
+            const IN_PROGRESS_OPTION_ID = 'IFSSO_kgDOBJz3gg';
+            const SKIP_IF_STATUS = ['Ready for QA', 'Done'];
+
+            // Same closingIssuesReferences lookup as qa-routing.yml — the set of
+            // issues this PR is linked to, whether via body keyword or the
+            // Development panel UI.
+            const { repository } = await github.graphql(
+              `query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 50) {
+                      nodes {
+                        number
+                        repository { nameWithOwner }
+                      }
+                      pageInfo { hasNextPage }
+                    }
+                  }
+                }
+              }`,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                number: context.payload.pull_request.number,
+              }
+            );
+
+            const closingIssues = repository.pullRequest.closingIssuesReferences;
+            if (closingIssues.pageInfo.hasNextPage) {
+              core.warning('This PR has more than 50 closing issue references; only the first 50 are checked.');
+            }
+            const refs = closingIssues.nodes;
+            const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const crossRepo = refs.filter(r => r.repository.nameWithOwner !== sameRepo);
+            if (crossRepo.length > 0) {
+              core.warning(`Skipping closing reference(s) in other repos (not supported by this workflow): ${crossRepo.map(r => `${r.repository.nameWithOwner}#${r.number}`).join(', ')}`);
+            }
+            const issueNumbers = [...new Set(
+              refs.filter(r => r.repository.nameWithOwner === sameRepo).map(r => r.number)
+            )];
+
+            if (issueNumbers.length === 0) {
+              core.info('No linked issues found on this PR — nothing to do.');
+              return;
+            }
+
+            for (const issue_number of issueNumbers) {
+              try {
+                const { repository: issueRepo } = await github.graphql(
+                  `query($owner: String!, $repo: String!, $number: Int!) {
+                    repository(owner: $owner, name: $repo) {
+                      issue(number: $number) {
+                        id
+                        issueFieldValues(first: 20) {
+                          nodes {
+                            ... on IssueFieldSingleSelectValue {
+                              name
+                              field { name }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }`,
+                  {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    number: issue_number,
+                  }
+                );
+
+                const workStatusValue = issueRepo.issue.issueFieldValues.nodes.find(
+                  n => n.field && n.field.name === 'Work-status'
+                );
+                const currentStatus = workStatusValue ? workStatusValue.name : null;
+
+                if (SKIP_IF_STATUS.includes(currentStatus)) {
+                  core.info(`Issue #${issue_number} Work-status is already "${currentStatus}" — not moving it back to In-progress.`);
+                  continue;
+                }
+
+                await github.graphql(
+                  `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
+                    setIssueFieldValue(input: {
+                      issueId: $issueId,
+                      issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
+                    }) {
+                      issue { id }
+                    }
+                  }`,
+                  {
+                    issueId: issueRepo.issue.id,
+                    fieldId: WORK_STATUS_FIELD_ID,
+                    optionId: IN_PROGRESS_OPTION_ID,
+                  }
+                );
+                core.info(`Issue #${issue_number}: Work-status "${currentStatus ?? '(unset)'}" → In-progress.`);
+              } catch (err) {
+                core.warning(`Could not update issue #${issue_number}: ${err.message}`);
+              }
+            }

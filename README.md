@@ -20,7 +20,9 @@ health files, and a canonical label set with zero per-repo work.
 ├── pull_request_template.md ← Issues / Refs — see QA convention below
 ├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
 └── workflows/
-    └── qa-routing.yml        ← Reusable workflow — see "PR convention" below. Label sync / CI still planned.
+    ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below. Label sync / CI still planned.
+    ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work-status Done, both directions
+    └── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work-status In-progress
 
 plugins/
 └── gh-issue-templates/      ← Claude Code plugin — see "Claude Code plugin" below
@@ -179,6 +181,76 @@ set by option ID, not name). Those IDs are hardcoded as constants in
 (even with the same name), it gets new IDs and the workflow needs updating.
 Look them up via `repository.issueFields` for any repo in the org (the field
 is org-wide, so it shows up the same everywhere).
+
+## Issue status sync workflow
+
+`.github/workflows/issue-status-sync.yml` is a reusable workflow that keeps
+an issue's open/closed state and its **Work-status** field in sync, in both
+directions. Wrapper:
+
+```yaml
+# .github/workflows/issue-status-sync.yml (in the consuming repo)
+name: Issue status sync
+
+on:
+  issues:
+    types: [closed, field_added]
+
+jobs:
+  sync:
+    permissions:
+      issues: write
+      contents: read
+    uses: havit-internal/.github/.github/workflows/issue-status-sync.yml@main
+    with:
+      runner: '["ubuntu-latest"]'   # optional — defaults to this
+```
+
+What it does:
+- **Issue closed as completed** → sets Work-status to **Done**. A close with
+  any other reason (won't-fix, duplicate) is left alone — "Done" implies
+  actual completion, not "not planned".
+- **Work-status set to Done** (the `field_added` activity type, which GitHub
+  fires whenever any issue field value is set or changed) → closes the
+  issue as completed.
+
+Each direction checks the other side's current state before acting (already
+Done? already closed?), so triggering one doesn't bounce back and forth with
+the other — it settles after at most one harmless extra run.
+
+## PR-linked issue status workflow
+
+`.github/workflows/pr-linked-status.yml` is a reusable workflow that moves
+an issue's **Work-status** to **In-progress** as soon as a PR is linked to
+it — same `closingIssuesReferences` detection as `qa-routing.yml` (body
+keyword or Development panel link, either way). Wrapper:
+
+```yaml
+# .github/workflows/pr-linked-status.yml (in the consuming repo)
+name: PR-linked issue status
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, edited]
+
+jobs:
+  sync:
+    permissions:
+      issues: write
+      pull-requests: read
+      contents: read
+    uses: havit-internal/.github/.github/workflows/pr-linked-status.yml@main
+    with:
+      runner: '["ubuntu-latest"]'   # optional — defaults to this
+```
+
+It skips issues whose Work-status is already **Ready for QA** or **Done**,
+so it never walks status backward (e.g. a small follow-up PR after QA
+rejected it shouldn't undo that progress). Caveat: a PR linked *purely*
+through the Development panel, with no further edit to the PR itself,
+won't trigger this workflow until the PR's next `opened`/`edited`-type
+event — there's no dedicated webhook event for "issue linked via panel"
+alone.
 
 ## Claude Code plugin
 
