@@ -30,23 +30,6 @@
   color: "c5def5"
   description: "Cosmetic / low impact"
 
-# ─── Status (the workflow gate) ─────────────────────────────────────────
-- name: "status:in-progress"
-  color: "0969da"
-  description: "Being worked on"
-
-- name: "status:in-review"
-  color: "8250df"
-  description: "PR open, awaiting code review"
-
-- name: "status:ready-for-qa"
-  color: "9a6700"
-  description: "Merged to main; QA to verify"
-
-- name: "status:qa-rejected"
-  color: "cf222e"
-  description: "QA rejected; back to developer"
-
 # ─── Meta / triage ──────────────────────────────────────────────────────
 - name: "needs-triage"
   color: "e6e6e6"

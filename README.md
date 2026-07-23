@@ -18,7 +18,7 @@ health files, and a canonical label set with zero per-repo work.
 │   ├── task.yml             ← Implementation slice with definition-of-done
 │   └── config.yml           ← Disables blank issues
 ├── pull_request_template.md ← Issues / Refs — see QA convention below
-├── labels.yml               ← Source of truth for sev:*/status:*/meta labels (work type is an Issue Type, not a label)
+├── labels.yml               ← Source of truth for sev:*/meta labels (work type is an Issue Type, not a label; workflow status is the Work-status issue field, not a label)
 └── workflows/
     └── qa-routing.yml        ← Reusable workflow — see "PR convention" below. Label sync / CI still planned.
 
@@ -74,25 +74,20 @@ to be added there to match `user_story.yml`, which already sets `type: story`.
 
 The issue templates set their Issue Type via the top-level `type:` key in
 each `.github/ISSUE_TEMPLATE/*.yml` file (not the `labels:` key). `labels.yml`
-below is only for things Issue Types don't cover: severity, workflow status,
-and triage/meta labels.
+below is only for things Issue Types and the Work-status field don't cover:
+severity and triage/meta labels. Workflow status itself is **not** a label —
+it's the org-wide **Work-status** issue field (see "QA routing workflow"
+below).
 
 ## Label sync
 
-`labels.yml` is the canonical list for severity (`sev:*`), status (`status:*`),
-and meta labels (`needs-triage`, `blocked`, etc.) — everything that isn't a
-work type. **Planned:** a scheduled label-sync workflow, living in this
+`labels.yml` is the canonical list for severity (`sev:*`) and meta labels
+(`needs-triage`, `blocked`, etc.) — everything that isn't a work type or a
+workflow status. **Planned:** a scheduled label-sync workflow, living in this
 repo's own `.github/workflows/`, will apply it to every repo in the org. That
 workflow does not exist yet, so today this file is documentation only —
 labels must be applied to each repo manually until it's built. Do not create
 ad-hoc labels in individual repos — edit this file and open a PR.
-
-**Note:** the `status:*` labels here (`in-progress`/`in-review`/`ready-for-qa`/
-`qa-rejected`) now overlap with the org-wide **Work-status** issue field
-(`Backlog`/`Ready`/`In-progress`/`In-review`/`Ready for QA`/`Done`) that
-`qa-routing` writes to (see below) — the two aren't kept in sync with each
-other. Worth deciding separately whether `status:*` should be retired in
-favor of Work-status.
 
 ## PR convention: `Closes`/`Fixes`/`Resolves` vs `Refs`
 
