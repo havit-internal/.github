@@ -1,0 +1,127 @@
+name: Issue status sync
+
+# Reusable workflow — called from a thin wrapper in each consuming repo.
+# Keeps the org-wide "Work-status" issue field in sync with the issue's
+# open/closed state, in both directions:
+#   - closing an issue as completed sets Work-status to Done
+#   - setting Work-status to Done closes the issue
+# Each direction checks the other side's current state first, so a change
+# made by one direction doesn't bounce back and forth — it settles after at
+# most one extra (no-op) hop.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]'
+        type: string
+        default: '["ubuntu-latest"]'
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - name: Sync issue state and Work-status field
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Org-wide "Work-status" issue field (single select) and its "Done"
+            // option. Node IDs, not names — GraphQL single-select fields are set
+            // by option ID, not by string. Looked up via repository.issueFields
+            // for havit-internal/.github; re-fetch and update if the field or
+            // option is ever recreated (a recreate mints new IDs even if the
+            // name is unchanged).
+            const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
+            const DONE_OPTION_ID = 'IFSSO_kgDOBJz3hQ';
+
+            async function getWorkStatus(issue_number) {
+              const { repository } = await github.graphql(
+                `query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    issue(number: $number) {
+                      issueFieldValues(first: 20) {
+                        nodes {
+                          ... on IssueFieldSingleSelectValue {
+                            name
+                            field { name }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }`,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  number: issue_number,
+                }
+              );
+              const match = repository.issue.issueFieldValues.nodes.find(
+                n => n.field && n.field.name === 'Work-status'
+              );
+              return match ? match.name : null;
+            }
+
+            const issue_number = context.payload.issue.number;
+
+            if (context.payload.action === 'closed') {
+              // Only a genuine completion should flip Work-status to Done — a
+              // "not planned" close (won't-fix, duplicate) isn't "done".
+              if (context.payload.issue.state_reason !== 'completed') {
+                core.info(`Issue #${issue_number} closed as ${context.payload.issue.state_reason || 'unknown'}, not "completed" — leaving Work-status alone.`);
+                return;
+              }
+
+              const currentStatus = await getWorkStatus(issue_number);
+              if (currentStatus === 'Done') {
+                core.info(`Issue #${issue_number} Work-status is already Done — nothing to do.`);
+                return;
+              }
+
+              await github.graphql(
+                `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
+                  setIssueFieldValue(input: {
+                    issueId: $issueId,
+                    issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
+                  }) {
+                    issue { id }
+                  }
+                }`,
+                {
+                  issueId: context.payload.issue.node_id,
+                  fieldId: WORK_STATUS_FIELD_ID,
+                  optionId: DONE_OPTION_ID,
+                }
+              );
+              core.info(`Issue #${issue_number} closed as completed — set Work-status to Done.`);
+              return;
+            }
+
+            if (context.payload.action === 'field_added') {
+              if (context.payload.issue.state === 'closed') {
+                core.info(`Issue #${issue_number} is already closed — nothing to do.`);
+                return;
+              }
+
+              const currentStatus = await getWorkStatus(issue_number);
+              if (currentStatus !== 'Done') {
+                core.info(`Issue #${issue_number} Work-status is "${currentStatus ?? '(unset)'}", not Done — nothing to do.`);
+                return;
+              }
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                state: 'closed',
+                state_reason: 'completed',
+              });
+              core.info(`Issue #${issue_number} Work-status set to Done — closed the issue.`);
+              return;
+            }
+
+            core.info(`Unhandled action "${context.payload.action}" — nothing to do.`);
