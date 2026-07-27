@@ -102,7 +102,7 @@ updates the color/description of ones that already match by name, but never
 deletes or otherwise touches a label that isn't in `.github/labels.yml` — a
 repo's own ad-hoc labels are left alone.
 
-It needs an org-level secret, **`ORG_LABEL_SYNC_TOKEN`** — a fine-grained
+It needs an org-level secret, **`ORG_LABEL_SYNC_SECRET`** — a fine-grained
 PAT (or GitHub App token) with **Issues: Read and write** across *all
 repositories* in the org. The default `GITHUB_TOKEN` won't work here: it's
 scoped only to the repo the workflow runs in, and this workflow writes
@@ -116,7 +116,7 @@ labels to every other repo in the org. To set it up:
    approve it before it's usable.
 3. Add it as an **organization-level** Actions secret (Org Settings →
    Secrets and variables → Actions → New organization secret), named
-   `ORG_LABEL_SYNC_TOKEN`, with repository access limited to
+   `ORG_LABEL_SYNC_SECRET`, with repository access limited to
    `havit-internal/.github` (the only repo that needs it).
 4. Fine-grained PATs expire (max 1 year) — note the expiry and plan to
    rotate it, or move to a GitHub App later if this becomes long-lived.

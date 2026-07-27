@@ -8,7 +8,7 @@ name: Label sync
 # of existing ones that match by name, but never deletes/touches labels that
 # aren't in labels.yml. Repos that added their own ad-hoc labels keep them.
 #
-# Needs an org-level secret ORG_LABEL_SYNC_TOKEN — a fine-grained PAT (or
+# Needs an org-level secret ORG_LABEL_SYNC_SECRET — a fine-grained PAT (or
 # GitHub App token) with Issues: Read and write access across all repos in
 # the org. The default GITHUB_TOKEN can't be used here: it's scoped only to
 # the repo the workflow runs in, and this workflow writes to every other
@@ -32,12 +32,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify ORG_LABEL_SYNC_TOKEN secret is configured
+      - name: Verify ORG_LABEL_SYNC_SECRET secret is configured
         env:
-          TOKEN: ${{ secrets.ORG_LABEL_SYNC_TOKEN }}
+          TOKEN: ${{ secrets.ORG_LABEL_SYNC_SECRET }}
         run: |
           if [ -z "$TOKEN" ]; then
-            echo "::error::ORG_LABEL_SYNC_TOKEN organization secret is missing or empty — see README.md (\"Label sync\") for how to create and scope it. Nothing was synced."
+            echo "::error::ORG_LABEL_SYNC_SECRET organization secret is missing or empty — see README.md (\"Label sync\") for how to create and scope it. Nothing was synced."
             exit 1
           fi
 
@@ -47,7 +47,7 @@ jobs:
       - name: Sync labels to every repo in the org
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.ORG_LABEL_SYNC_TOKEN }}
+          github-token: ${{ secrets.ORG_LABEL_SYNC_SECRET }}
           script: |
             const fs = require('fs');
             const labels = JSON.parse(fs.readFileSync('/tmp/labels.json', 'utf8'));
