@@ -81,10 +81,12 @@ jobs:
               try {
                 // `field` on IssueFieldSingleSelectValue is the IssueFields union —
                 // GraphQL unions only allow `__typename` and inline fragments
-                // directly, so `field { name }` fails ("Selections can't be made
-                // directly on unions"). Every union member is a Node, so select
-                // through that instead and match by ID (same ID used above for
-                // the mutation, more robust than matching a display name anyway).
+                // naming a concrete member type, so `field { name }` fails
+                // ("Selections can't be made directly on unions"). This value is
+                // specifically an IssueFieldSingleSelectValue, so its `field` is
+                // the corresponding concrete type, IssueFieldSingleSelect —
+                // match by ID (same ID used above for the mutation, more robust
+                // than matching a display name anyway).
                 const { repository: issueRepo } = await github.graphql(
                   `query($owner: String!, $repo: String!, $number: Int!) {
                     repository(owner: $owner, name: $repo) {
@@ -96,7 +98,7 @@ jobs:
                             ... on IssueFieldSingleSelectValue {
                               name
                               field {
-                                ... on Node { id }
+                                ... on IssueFieldSingleSelect { id }
                               }
                             }
                           }
