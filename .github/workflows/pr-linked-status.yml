@@ -79,6 +79,12 @@ jobs:
 
             for (const issue_number of issueNumbers) {
               try {
+                // `field` on IssueFieldSingleSelectValue is the IssueFields union —
+                // GraphQL unions only allow `__typename` and inline fragments
+                // directly, so `field { name }` fails ("Selections can't be made
+                // directly on unions"). Every union member is a Node, so select
+                // through that instead and match by ID (same ID used above for
+                // the mutation, more robust than matching a display name anyway).
                 const { repository: issueRepo } = await github.graphql(
                   `query($owner: String!, $repo: String!, $number: Int!) {
                     repository(owner: $owner, name: $repo) {
@@ -89,7 +95,9 @@ jobs:
                           nodes {
                             ... on IssueFieldSingleSelectValue {
                               name
-                              field { name }
+                              field {
+                                ... on Node { id }
+                              }
                             }
                           }
                         }
@@ -109,7 +117,7 @@ jobs:
                 }
 
                 const workStatusValue = issueRepo.issue.issueFieldValues.nodes.find(
-                  n => n.field && n.field.name === 'Work-status'
+                  n => n.field && n.field.id === WORK_STATUS_FIELD_ID
                 );
                 const currentStatus = workStatusValue ? workStatusValue.name : null;
 

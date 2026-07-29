@@ -39,6 +39,13 @@ jobs:
             const DONE_OPTION_ID = 'IFSSO_kgDOBJz3hQ';
 
             async function getWorkStatus(issue_number) {
+              // `field` on IssueFieldSingleSelectValue is the IssueFields union —
+              // GraphQL unions only allow `__typename` and inline fragments
+              // directly, so `field { name }` fails ("Selections can't be made
+              // directly on unions"). Every union member is a Node, so select
+              // through that instead and match by ID (same ID qa-routing.yml
+              // already uses to identify the field, more robust than matching a
+              // display name anyway).
               const { repository } = await github.graphql(
                 `query($owner: String!, $repo: String!, $number: Int!) {
                   repository(owner: $owner, name: $repo) {
@@ -47,7 +54,9 @@ jobs:
                         nodes {
                           ... on IssueFieldSingleSelectValue {
                             name
-                            field { name }
+                            field {
+                              ... on Node { id }
+                            }
                           }
                         }
                       }
@@ -61,7 +70,7 @@ jobs:
                 }
               );
               const match = repository.issue.issueFieldValues.nodes.find(
-                n => n.field && n.field.name === 'Work-status'
+                n => n.field && n.field.id === WORK_STATUS_FIELD_ID
               );
               return match ? match.name : null;
             }
