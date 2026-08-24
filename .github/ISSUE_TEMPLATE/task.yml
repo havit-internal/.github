@@ -2,34 +2,9 @@ name: Task
 description: An implementation slice — a piece of a Story
 type: task
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Tasks are implementation-level work items — usually half-a-day to two days.
-        Attach them as **sub-issues** of the parent Story so the tree stays traversable.
-
   - type: textarea
-    id: summary
+    id: description
     attributes:
-      label: What needs to be done
-      description: One-paragraph description of the change.
-    validations:
-      required: true
-
-  - type: textarea
-    id: details
-    attributes:
-      label: Details
-      description: Definition of done, parent Story/Feature link, design notes — whatever's relevant.
-      value: |
-        Definition of done:
-        - [ ] Code implemented in the affected projects
-        - [ ] Unit / integration tests updated
-        - [ ] No lint warnings introduced
-        - [ ] Documentation / XML comments updated where relevant
-
-        Parent Story / Feature: #
-
-        Design notes:
+      label: Description
     validations:
       required: true

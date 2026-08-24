@@ -15,7 +15,7 @@ health files, and a canonical label set with zero per-repo work.
 │   ├── feature.yml          ← Outcome-level container; rolls up Stories
 │   ├── bug_report.yml       ← "Something broken" — Environment + Details required
 │   ├── user_story.yml       ← "As a … so that …" with acceptance criteria
-│   ├── task.yml             ← Implementation slice with definition-of-done
+│   ├── task.yml             ← Implementation slice; single freeform description
 │   └── config.yml           ← Disables blank issues
 ├── pull_request_template.md ← Issues / Refs — see QA convention below
 ├── labels.yml               ← Source of truth for sev:*/meta labels (work type is an Issue Type, not a label; workflow status is the Work-status issue field, not a label)
