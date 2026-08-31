@@ -1,0 +1,12 @@
+name: Feature
+description: Outcome-level work that will be broken down into Stories
+type: feature
+labels:
+  - "needs-triage"
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true

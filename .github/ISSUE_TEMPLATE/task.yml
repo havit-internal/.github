@@ -1,0 +1,10 @@
+name: Task
+description: An implementation slice — a piece of a Story
+type: task
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true

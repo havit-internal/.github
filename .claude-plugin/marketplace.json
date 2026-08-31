@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "havit-internal",
+  "description": "Claude Code plugins for havit-internal org tooling",
+  "owner": {
+    "name": "HAVIT"
+  },
+  "plugins": [
+    {
+      "name": "gh-issue-templates",
+      "description": "Create GitHub issues that comply with havit-internal's org-wide issue templates (Bug report, Task, User story, Feature)",
+      "author": {
+        "name": "HAVIT"
+      },
+      "source": "./plugins/gh-issue-templates",
+      "category": "productivity",
+      "homepage": "https://github.com/havit-internal/.github/tree/main/plugins/gh-issue-templates"
+    }
+  ]
+}

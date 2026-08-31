@@ -1,0 +1,180 @@
+name: QA routing
+
+# Reusable workflow — called from a thin wrapper in each consuming repo.
+# Reads the merged PR's "closing issues" — the same set GitHub computes for
+# the PR's Development panel, whether linked via a Closes/Fixes/Resolves #N
+# keyword in the body OR via the manual "link a pull request" UI — sets the
+# org-wide "Work-status" issue field to "Ready for QA" on those issues, and
+# assigns everyone listed in that repo's .github/QAOWNERS. See README.md for
+# the wrapper snippet and QAOWNERS format.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]'
+        type: string
+        default: '["ubuntu-latest"]'
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  route-to-qa:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    steps:
+      - name: Set QA field and assign linked issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // closingIssuesReferences is GitHub's own resolved list of issues this PR
+            // closes on merge — the same data backing the PR's "Development" panel.
+            // It's populated from both Closes/Fixes/Resolves #N text and issues linked
+            // manually via that panel's UI, so there's no body text to parse here.
+            const { repository } = await github.graphql(
+              `query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 50) {
+                      nodes {
+                        number
+                        repository { nameWithOwner }
+                      }
+                      pageInfo { hasNextPage }
+                    }
+                  }
+                }
+              }`,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                number: context.payload.pull_request.number,
+              }
+            );
+
+            const closingIssues = repository.pullRequest.closingIssuesReferences;
+            if (closingIssues.pageInfo.hasNextPage) {
+              core.warning('This PR has more than 50 closing issue references; only the first 50 are routed to QA.');
+            }
+            const refs = closingIssues.nodes;
+            const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const crossRepo = refs.filter(r => r.repository.nameWithOwner !== sameRepo);
+            if (crossRepo.length > 0) {
+              core.warning(`Skipping closing reference(s) in other repos (not supported by this workflow): ${crossRepo.map(r => `${r.repository.nameWithOwner}#${r.number}`).join(', ')}`);
+            }
+            const issueNumbers = [...new Set(
+              refs.filter(r => r.repository.nameWithOwner === sameRepo).map(r => r.number)
+            )];
+
+            if (issueNumbers.length === 0) {
+              core.info('No closing issue references found (via body keywords or the Development panel) — nothing to route.');
+              return;
+            }
+
+            let qaOwners = [];
+            try {
+              const { data } = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: '.github/QAOWNERS',
+              });
+              qaOwners = Buffer.from(data.content, 'base64')
+                .toString('utf8')
+                .split(/\r?\n/)
+                .map(l => l.replace(/#.*$/, '').trim())
+                .filter(l => l)
+                .map(l => l.replace(/^@/, ''));
+            } catch (err) {
+              if (err.status === 404) {
+                core.warning('No .github/QAOWNERS file in this repo — Work-status will be set but issues left unassigned.');
+              } else {
+                throw err;
+              }
+            }
+
+            // Org-wide "Work-status" issue field (single select) and its options.
+            // These are node IDs, not names — GraphQL single-select fields are set
+            // by option ID, not by string. Looked up via repository.issueFields for
+            // havit-internal/.github; re-fetch and update these constants if the
+            // field or an option is ever recreated (a recreate mints new IDs even
+            // if the name is unchanged).
+            const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
+            const READY_FOR_QA_OPTION_ID = 'IFSSO_kgDOBJz3hA';
+            const DONE_OPTION_ID = 'IFSSO_kgDOBJz3hQ';
+
+            // Issues labeled "skip-qa" (purely technical work, nothing for a tester
+            // to verify) go straight to Done instead of Ready for QA, and don't get
+            // QAOWNERS assigned.
+            const SKIP_QA_LABEL = 'skip-qa';
+
+            for (const issue_number of issueNumbers) {
+              try {
+                const { data: issue } = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number,
+                });
+
+                const skipQa = issue.labels.some(
+                  l => (typeof l === 'string' ? l : l.name) === SKIP_QA_LABEL
+                );
+
+                await github.graphql(
+                  `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
+                    setIssueFieldValue(input: {
+                      issueId: $issueId,
+                      issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
+                    }) {
+                      issue { id }
+                    }
+                  }`,
+                  {
+                    issueId: issue.node_id,
+                    fieldId: WORK_STATUS_FIELD_ID,
+                    optionId: skipQa ? DONE_OPTION_ID : READY_FOR_QA_OPTION_ID,
+                  }
+                );
+
+                if (skipQa) {
+                  if (issue.state !== 'closed') {
+                    await github.rest.issues.update({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number,
+                      state: 'closed',
+                      state_reason: 'completed',
+                    });
+                  }
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number,
+                    body: `Merged in #${context.payload.pull_request.number} — has the \`${SKIP_QA_LABEL}\` label, so it skipped QA and went straight to Done.`,
+                  });
+                  continue;
+                }
+
+                if (qaOwners.length > 0) {
+                  await github.rest.issues.addAssignees({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number,
+                    assignees: qaOwners,
+                  });
+                }
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number,
+                  body: `Merged in #${context.payload.pull_request.number} — ready for QA.` +
+                        (qaOwners.length > 0
+                          ? ` Assigned: ${qaOwners.map(o => '@' + o).join(', ')}.`
+                          : ' No QAOWNERS configured — unassigned.'),
+                });
+              } catch (err) {
+                core.warning(`Could not route issue #${issue_number}: ${err.message}`);
+              }
+            }

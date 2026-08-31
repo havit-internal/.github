@@ -1,5 +1,5 @@
-# Disallow the empty issue path, so every issue picks a type template
-# (and therefore gets its `type:*` label).
+# Disallow the empty issue path, so every issue picks a template and therefore
+# gets its native Issue Type (feature / story / task / bug).
 blank_issues_enabled: false
 
 # Optional: uncomment and set real URLs when you have them.
