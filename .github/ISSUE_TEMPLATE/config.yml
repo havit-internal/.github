@@ -1,5 +1,5 @@
-# Disallow the empty issue path. Every issue must go through one of the templates
-# above, so severity, acceptance criteria, and task definition-of-done are captured.
+# Disallow the empty issue path, so every issue picks a template and therefore
+# gets its native Issue Type (feature / story / task / bug).
 blank_issues_enabled: false
 
 # Optional: uncomment and set real URLs when you have them.

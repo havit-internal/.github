@@ -4,35 +4,9 @@ type: story
 labels:
   - "needs-triage"
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Stories describe **outcomes for a user**, not implementation. Use the "As a … so that …" format.
-        Break implementation into Task sub-issues once the story is ready to be worked on.
-
   - type: textarea
-    id: story
+    id: description
     attributes:
-      label: User story
-      value: |
-        As a <role>,
-        I want <capability>,
-        so that <outcome>.
-    validations:
-      required: true
-
-  - type: textarea
-    id: details
-    attributes:
-      label: Details
-      description: Acceptance criteria, notes / open questions, parent feature or related work.
-      placeholder: |
-        Acceptance criteria:
-        - When the user … , then …
-        - Given …, the system should …
-
-        Notes / open questions:
-
-        Parent feature / related work: Refs #123
+      label: Description
     validations:
       required: true

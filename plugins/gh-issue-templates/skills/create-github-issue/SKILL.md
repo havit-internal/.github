@@ -6,7 +6,7 @@ version: 1.0.0
 
 # Create GitHub issue from template
 
-Creates a GitHub issue whose title, body sections, labels, and native Issue
+Creates a GitHub issue whose title, body, labels, and native Issue
 Type match one of the org's issue-form templates — the same structure a
 human would get filling out the form in the GitHub web UI.
 
@@ -70,9 +70,9 @@ For each non-markdown field, in template order:
 
 - If the user already gave you this information earlier in the conversation,
   use it — don't re-ask.
-- If a field has a `value:` (pre-filled default, e.g. the user-story
-  "As a … I want … so that …" skeleton), use it as a starting point and ask
-  the user to fill in the specifics rather than asking an open-ended question.
+- If a field has a `value:` (pre-filled default), use it as a starting point
+  and ask the user to fill in the specifics rather than asking an open-ended
+  question.
 - Otherwise ask the user directly for the field, using its `label` and
   `description` verbatim so they know what's expected.
 - Required fields need real content — don't invent placeholder text to fill
@@ -84,7 +84,11 @@ For each non-markdown field, in template order:
 - Title: a concise summary (from the user, or the first line of the main
   field) — no prefix; the native Issue Type set in step 8 already conveys
   bug/task/story/feature.
-- Body: for each field with content, in template order:
+- Body: if the template has exactly one field (as the org defaults currently
+  do — a single `Description` textarea), emit its content as-is, with no
+  heading. These templates are deliberately section-free; adding a heading
+  would put back the structure they removed.
+- For a multi-field template, emit each field with content, in template order:
   ```
   ### <label>
 

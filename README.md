@@ -13,9 +13,9 @@ health files, and a canonical label set with zero per-repo work.
 .github/
 ├── ISSUE_TEMPLATE/
 │   ├── feature.yml          ← Outcome-level container; rolls up Stories
-│   ├── bug_report.yml       ← "Something broken" — Environment + Details required
-│   ├── user_story.yml       ← "As a … so that …" with acceptance criteria
-│   ├── task.yml             ← Implementation slice; single freeform description
+│   ├── bug_report.yml       ← "Something broken" in dev, staging, or production
+│   ├── user_story.yml       ← A user-facing slice of work
+│   ├── task.yml             ← Implementation slice — a piece of a Story
 │   └── config.yml           ← Disables blank issues
 ├── pull_request_template.md ← Issues / Refs — see QA convention below
 ├── labels.yml               ← Source of truth for sev:*/meta labels (work type is an Issue Type, not a label; workflow status is the Work-status issue field, not a label)
@@ -60,12 +60,15 @@ set defined here.
 - **Story** — a vertical, user-facing slice of a Feature. The unit that gets
   planned and delivered.
 - **Task** — an implementation-level piece of a Story.
-- **Bug** — unplanned work; can reference a parent Story or Feature via
-  "Related work" but doesn't require one.
+- **Bug** — unplanned work; can reference a parent Story or Feature but
+  doesn't require one.
 
-Each template's "parent" field is manual (plain issue number, not GitHub's
-native sub-issue linking) — link them explicitly and use sub-issues where it
-helps navigation.
+Every template is a single required **Description** box — free-form plain
+text, no sections, no checklists, no prefilled content. Write whatever the
+issue needs; nothing is asked for that the author doesn't want to give.
+
+Parent/child linking is manual — mention the parent issue number in the
+description, and use GitHub's sub-issue UI where it helps navigation.
 
 ## Work type vs. labels
 
