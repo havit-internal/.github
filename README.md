@@ -12,9 +12,9 @@ health files, and a canonical label set with zero per-repo work.
 ```
 .github/
 ├── ISSUE_TEMPLATE/
-│   ├── bug_report.yml       ← "Something broken" — severity + repro required
-│   ├── user_story.yml       ← "As a … so that …" with acceptance criteria
-│   ├── task.yml             ← Implementation slice with definition-of-done
+│   ├── bug_report.md        ← Plain free-form body, labels `type:bug` + `needs-triage`
+│   ├── user_story.md        ← Plain free-form body, labels `type:story` + `needs-triage`
+│   ├── task.md              ← Plain free-form body, label `type:task`
 │   └── config.yml           ← Disables blank issues
 ├── pull_request_template.md ← Verify: / Refs — see QA convention below
 └── labels.yml               ← Source of truth for org-wide labels
@@ -41,6 +41,10 @@ repo entirely — they do not merge with local templates.
 
 Prefer keeping repos with **zero local templates** so they inherit the full
 set defined here.
+
+The templates themselves are deliberately empty: they exist only to pick the
+issue type and apply the matching `type:*` label. The body is free-form plain
+text — no sections, no checklists, no prefilled content.
 
 ## Label sync
 
