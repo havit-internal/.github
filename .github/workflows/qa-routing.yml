@@ -4,7 +4,7 @@ name: QA routing
 # Reads the merged PR's "closing issues" — the same set GitHub computes for
 # the PR's Development panel, whether linked via a Closes/Fixes/Resolves #N
 # keyword in the body OR via the manual "link a pull request" UI — sets the
-# org-wide "Work-status" issue field to "Ready for QA" on those issues, and
+# org-wide "Work status" issue field to "Ready for QA" on those issues, and
 # assigns everyone listed in that repo's .github/QAOWNERS. See README.md for
 # the wrapper snippet and QAOWNERS format.
 
@@ -88,13 +88,13 @@ jobs:
                 .map(l => l.replace(/^@/, ''));
             } catch (err) {
               if (err.status === 404) {
-                core.warning('No .github/QAOWNERS file in this repo — Work-status will be set but issues left unassigned.');
+                core.warning('No .github/QAOWNERS file in this repo — Work status will be set but issues left unassigned.');
               } else {
                 throw err;
               }
             }
 
-            // Org-wide "Work-status" issue field (single select) and its options.
+            // Org-wide "Work status" issue field (single select) and its options.
             // These are node IDs, not names — GraphQL single-select fields are set
             // by option ID, not by string. Looked up via repository.issueFields for
             // havit-internal/.github; re-fetch and update these constants if the
