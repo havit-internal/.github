@@ -22,7 +22,7 @@ health files, and a canonical label set with zero per-repo work.
 └── workflows/
     ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below.
     ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work status Done, both directions
-    ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work status In-progress
+    ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work status In progress
     └── label-sync.yml        ← Runs centrally — see "Label sync" below. CI still planned.
 
 plugins/
@@ -259,7 +259,7 @@ the other — it settles after at most one harmless extra run.
 ## PR-linked issue status workflow
 
 `.github/workflows/pr-linked-status.yml` is a reusable workflow that moves
-an issue's **Work status** to **In-progress** as soon as a PR is linked to
+an issue's **Work status** to **In progress** as soon as a PR is linked to
 it — same `closingIssuesReferences` detection as `qa-routing.yml` (body
 keyword or Development panel link, either way). Wrapper:
 
