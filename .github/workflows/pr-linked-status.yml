@@ -3,7 +3,7 @@ name: PR-linked issue status
 # Reusable workflow — called from a thin wrapper in each consuming repo.
 # When a PR is linked to an issue (via a Closes/Fixes/Resolves #N keyword or
 # the manual "link a pull request" UI), sets that issue's org-wide
-# "Work-status" field to In-progress — unless it's already further along
+# "Work status" field to In-progress — unless it's already further along
 # (Ready for QA or Done), so this never walks status backward.
 
 on:
@@ -23,11 +23,11 @@ jobs:
   sync:
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
-      - name: Set Work-status to In-progress on linked issues
+      - name: Set Work status to In-progress on linked issues
         uses: actions/github-script@v7
         with:
           script: |
-            // Org-wide "Work-status" issue field (single select) and its
+            // Org-wide "Work status" issue field (single select) and its
             // "In-progress" option. Node IDs, not names — see qa-routing.yml for
             // how these were looked up and when they'd need refreshing.
             const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
@@ -114,7 +114,7 @@ jobs:
                 );
 
                 if (issueRepo.issue.state === 'CLOSED') {
-                  core.info(`Issue #${issue_number} is closed — not touching Work-status.`);
+                  core.info(`Issue #${issue_number} is closed — not touching Work status.`);
                   continue;
                 }
 
@@ -124,12 +124,12 @@ jobs:
                 const currentStatus = workStatusValue ? workStatusValue.name : null;
 
                 if (currentStatus === 'In-progress') {
-                  core.info(`Issue #${issue_number} Work-status is already In-progress — nothing to do.`);
+                  core.info(`Issue #${issue_number} Work status is already In-progress — nothing to do.`);
                   continue;
                 }
 
                 if (SKIP_IF_STATUS.includes(currentStatus)) {
-                  core.info(`Issue #${issue_number} Work-status is already "${currentStatus}" — not moving it back to In-progress.`);
+                  core.info(`Issue #${issue_number} Work status is already "${currentStatus}" — not moving it back to In-progress.`);
                   continue;
                 }
 
@@ -148,7 +148,7 @@ jobs:
                     optionId: IN_PROGRESS_OPTION_ID,
                   }
                 );
-                core.info(`Issue #${issue_number}: Work-status "${currentStatus ?? '(unset)'}" → In-progress.`);
+                core.info(`Issue #${issue_number}: Work status "${currentStatus ?? '(unset)'}" → In-progress.`);
               } catch (err) {
                 core.warning(`Could not update issue #${issue_number}: ${err.message}`);
               }

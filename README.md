@@ -18,11 +18,11 @@ health files, and a canonical label set with zero per-repo work.
 │   ├── task.yml             ← Implementation slice — a piece of a Story
 │   └── config.yml           ← Disables blank issues
 ├── pull_request_template.md ← Issues / Refs — see QA convention below
-├── labels.yml               ← Source of truth for sev:*/meta labels (work type is an Issue Type, not a label; workflow status is the Work-status issue field, not a label)
+├── labels.yml               ← Source of truth for sev:*/meta labels (work type is an Issue Type, not a label; workflow status is the Work status issue field, not a label)
 └── workflows/
     ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below.
-    ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work-status Done, both directions
-    ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work-status In-progress
+    ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work status Done, both directions
+    ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work status In-progress
     └── label-sync.yml        ← Runs centrally — see "Label sync" below. CI still planned.
 
 plugins/
@@ -80,9 +80,9 @@ to be added there to match `user_story.yml`, which already sets `type: story`.
 
 The issue templates set their Issue Type via the top-level `type:` key in
 each `.github/ISSUE_TEMPLATE/*.yml` file (not the `labels:` key). `labels.yml`
-below is only for things Issue Types and the Work-status field don't cover:
+below is only for things Issue Types and the Work status field don't cover:
 severity and triage/meta labels. Workflow status itself is **not** a label —
-it's the org-wide **Work-status** issue field (see "QA routing workflow"
+it's the org-wide **Work status** issue field (see "QA routing workflow"
 below).
 
 ## Label sync
@@ -131,7 +131,7 @@ keywords instead of inventing a separate one. Use `Closes #N`, `Fixes #N`,
 or `Resolves #N` — anywhere in the PR description, one or several
 comma-separated (`Fixes #10, #11`) — for every issue this PR fixes. GitHub
 auto-closes those issues on merge, and the workflow, in the same run, sets
-the org-wide **Work-status** issue field to **Ready for QA** and assigns
+the org-wide **Work status** issue field to **Ready for QA** and assigns
 everyone in `.github/QAOWNERS`, so the issue doesn't just quietly close —
 it still gets a QA pass.
 
@@ -179,10 +179,10 @@ What it does on merge:
    list GitHub shows in the PR's Development panel, covering both
    `Closes`/`Fixes`/`Resolves #N` text and manually linked issues. No
    matches → no-op.
-2. For each linked issue, sets the org-wide **Work-status** issue field
+2. For each linked issue, sets the org-wide **Work status** issue field
    (single select) to **Ready for QA** via the `setIssueFieldValue` GraphQL
    mutation — a single-select field only ever holds one value, so this
-   always replaces whatever Work-status was there before (no stacking,
+   always replaces whatever Work status was there before (no stacking,
    unlike labels). **Exception:** an issue labeled `skip-qa` goes straight
    to **Done** and gets closed instead — see below.
 3. Assigns **everyone** listed in that repo's `.github/QAOWNERS` — see below
@@ -191,7 +191,7 @@ What it does on merge:
 
 **`skip-qa` label:** for issues with nothing for a tester to verify (purely
 technical work — refactors, dependency bumps, internal tooling). Label the
-issue `skip-qa` *before* the PR merges, and `qa-routing` sets Work-status
+issue `skip-qa` *before* the PR merges, and `qa-routing` sets Work status
 straight to **Done** and closes the issue itself, instead of Ready for QA
 plus a QAOWNERS assignment. `skip-qa` is defined in `labels.yml` alongside
 the other meta labels.
@@ -206,12 +206,12 @@ ignored:
 @bob
 ```
 
-If a repo has no `QAOWNERS` file, the workflow still sets Work-status to
+If a repo has no `QAOWNERS` file, the workflow still sets Work status to
 Ready for QA but leaves the issue unassigned (logged as a warning in the
 workflow run) — so repos can adopt this incrementally rather than needing
 `QAOWNERS` set up before merges work at all.
 
-**Work-status field IDs:** the workflow references the `Work-status` field
+**Work status field IDs:** the workflow references the `Work status` field
 and its `Ready for QA` and `Done` options (the latter used by the `skip-qa`
 path above) by GraphQL node ID (single-select fields are set by option ID,
 not name). Those IDs are hardcoded as constants in `qa-routing.yml` — if the
@@ -223,7 +223,7 @@ it shows up the same everywhere).
 ## Issue status sync workflow
 
 `.github/workflows/issue-status-sync.yml` is a reusable workflow that keeps
-an issue's open/closed state and its **Work-status** field in sync, in both
+an issue's open/closed state and its **Work status** field in sync, in both
 directions. Wrapper:
 
 ```yaml
@@ -245,10 +245,10 @@ jobs:
 ```
 
 What it does:
-- **Issue closed as completed** → sets Work-status to **Done**. A close with
+- **Issue closed as completed** → sets Work status to **Done**. A close with
   any other reason (won't-fix, duplicate) is left alone — "Done" implies
   actual completion, not "not planned".
-- **Work-status set to Done** (the `field_added` activity type, which GitHub
+- **Work status set to Done** (the `field_added` activity type, which GitHub
   fires whenever any issue field value is set or changed) → closes the
   issue as completed.
 
@@ -259,7 +259,7 @@ the other — it settles after at most one harmless extra run.
 ## PR-linked issue status workflow
 
 `.github/workflows/pr-linked-status.yml` is a reusable workflow that moves
-an issue's **Work-status** to **In-progress** as soon as a PR is linked to
+an issue's **Work status** to **In-progress** as soon as a PR is linked to
 it — same `closingIssuesReferences` detection as `qa-routing.yml` (body
 keyword or Development panel link, either way). Wrapper:
 
@@ -282,7 +282,7 @@ jobs:
       runner: '["ubuntu-latest"]'   # optional — defaults to this
 ```
 
-It skips issues whose Work-status is already **Ready for QA** or **Done**,
+It skips issues whose Work status is already **Ready for QA** or **Done**,
 so it never walks status backward (e.g. a small follow-up PR after QA
 rejected it shouldn't undo that progress). Caveat: a PR linked *purely*
 through the Development panel, with no further edit to the PR itself,
