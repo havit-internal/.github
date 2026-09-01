@@ -85,6 +85,14 @@ severity and triage/meta labels. Workflow status itself is **not** a label —
 it's the org-wide **Work-status** issue field (see "QA routing workflow"
 below).
 
+No template presets `needs-triage` (or any other label), and that's
+deliberate — **don't add `labels:` back**. A label listed in a template is
+applied by GitHub a moment *after* the issue is created, as a separate step
+that ignores the label picker, so deselecting it in the new-issue dialog
+doesn't stick: it reappears on the created issue. Untriaged is better
+expressed as a filter — `is:issue no:assignee` — and `needs-triage` stays in
+`labels.yml` for whoever wants to set it by hand.
+
 ## Label sync
 
 `.github/labels.yml` is the canonical list for severity (`sev:*`) and meta

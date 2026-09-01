@@ -1,8 +1,6 @@
 name: User story
 description: A user-facing slice of work
 type: story
-labels:
-  - "needs-triage"
 body:
   - type: textarea
     id: description
