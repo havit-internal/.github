@@ -8,8 +8,10 @@
   Closes, Fixes, or Resolves — followed by the issue number(s), e.g.
   "Fixes #123" or "Closes #10, #11" (or link the issue via the Development
   panel on the right instead — either way works). GitHub closes the
-  issue(s) on merge, and the qa-routing workflow relabels them
-  status:ready-for-qa and assigns QA owners at the same time.
+  issue(s) on merge, and the qa-routing workflow sets their Work-status
+  field to "Ready for QA" and assigns everyone in .github/QAOWNERS at the
+  same time. An issue labeled skip-qa goes straight to "Done" instead and
+  gets no QA assignees.
 -->
 Fixes #
 
@@ -22,4 +24,4 @@ Refs #
 ## Checklist
 - [ ] Tests added or updated
 - [ ] Docs updated where relevant (README, XML doc comments, wiki)
-- [ ] Linked issue's `status:*` label reflects the current state
+- [ ] Linked issue carries `skip-qa` if it should bypass QA and close on merge
