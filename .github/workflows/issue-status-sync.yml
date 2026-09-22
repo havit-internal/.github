@@ -13,7 +13,10 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]'
+        # Self-hosted runners must be on Actions Runner v2.327.1 or newer —
+        # actions/github-script v8+ (and actions/checkout v5+) refuse to start
+        # on anything older. Hosted runners are always new enough.
+        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]. Self-hosted runners need Actions Runner v2.327.1+.'
         type: string
         default: '["ubuntu-latest"]'
 
@@ -26,7 +29,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
       - name: Sync issue state and Work status field
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             // Org-wide "Work status" issue field (single select) and its "Done"

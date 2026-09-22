@@ -180,7 +180,15 @@ jobs:
     with:
       runner: '["ubuntu-latest"]'   # optional — defaults to this. JSON array
                                     # of runner labels, e.g. '["self-hosted","on-prem"]'
+                                    # Self-hosted? See the runner floor below.
 ```
+
+**Self-hosted runners need Actions Runner v2.327.1 or newer.** These workflows
+run `actions/github-script` v9 (and `label-sync` runs `actions/checkout` v7),
+which refuse to start on an older runner — the job fails before any script of
+ours executes. Hosted runners like `ubuntu-latest` are always new enough, so
+this only matters if you pass self-hosted labels. The same floor applies to
+all three reusable workflows below.
 
 What it does on merge:
 1. Reads the PR's `closingIssuesReferences` (GraphQL) — the same resolved
@@ -250,6 +258,7 @@ jobs:
     uses: havit-internal/.github/.github/workflows/issue-status-sync.yml@main
     with:
       runner: '["ubuntu-latest"]'   # optional — defaults to this
+                                    # Self-hosted needs runner v2.327.1+
 ```
 
 What it does:
@@ -288,6 +297,7 @@ jobs:
     uses: havit-internal/.github/.github/workflows/pr-linked-status.yml@main
     with:
       runner: '["ubuntu-latest"]'   # optional — defaults to this
+                                    # Self-hosted needs runner v2.327.1+
 ```
 
 It skips issues whose Work status is already **Ready for QA** or **Done**,
