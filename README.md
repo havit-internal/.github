@@ -382,10 +382,10 @@ fields and their values, draft issues, insights, and configured workflows —
 therefore needs its own "auto-add items from repo X" workflow wired up by
 hand.
 
-One thing to check on the first copy: whether the copied board keeps its
-columns bound to the *issue field* `Work status` rather than silently falling
-back to a project-local single select. GitHub's docs don't state either way,
-and it can't be verified through the API without the `project` token scope.
+The copy does keep its board columns bound to the *issue field* `Work status`
+— it does not fall back to a project-local single select. GitHub's docs don't
+state this either way; it was checked by hand on the first project created
+from the template.
 
 ## Claude Code plugin
 
