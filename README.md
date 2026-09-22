@@ -352,16 +352,27 @@ including for multi-word field names.
 
 Issue fields only populate on issues owned by this org. Pull requests, draft
 issues, and issues from other orgs have no Work status at all and would pile
-up in a "No Work status" column. `is:issue` keeps that column from existing;
-PRs are still visible on the cards through `Linked pull requests`.
+up in a "No Work status" column. `is:issue` keeps them off the board; PRs are
+still visible on the cards through `Linked pull requests`.
 
-### Built-in project automations don't apply
+That column doesn't disappear entirely, though, and shouldn't. Nothing sets a
+Work status when an issue is created — the templates here set only a `type:` —
+so a fresh issue has no value and lands in "No Work status" until someone
+picks one. Treat that column as the intake lane: everything in it is
+untriaged, and triage means dragging it into Backlog or Ready.
 
-GitHub's built-in project workflows ("item closed → set Status to Done", "item
-added → Backlog") only ever write the *project's* Status field, so a project
-built this way leaves them inert. Nothing is lost — the three reusable
-workflows in this repo do the same jobs one level down, on the issue itself,
-which means they hold for issues that are in no project at all.
+### Which built-in project automations still apply
+
+The built-in workflows that *move work forward* — "when an issue or PR is
+closed, set Status to Done" and the same for merged PRs, both on by default —
+write the **project's** Status field, which a project built this way doesn't
+use. They go inert, and nothing is lost: the three reusable workflows in this
+repo do that job one level down, on the issue itself, so it holds for issues
+in no project at all.
+
+The built-in workflows that don't touch Status are unaffected and still worth
+using — auto-add (pull items from a repo into the project) above all, plus
+auto-archive.
 
 ### What a copy carries, and what it doesn't
 
