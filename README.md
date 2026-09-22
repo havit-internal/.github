@@ -75,8 +75,8 @@ description, and use GitHub's sub-issue UI where it helps navigation.
 Work type (feature / story / task / bug) is **not** a label — it's set via
 GitHub's native org-level **Issue Types** (org `Settings → Issue types`),
 which sync to every repo automatically with no workflow needed. `Task`,
-`Bug`, and `Feature` are already configured on the org; `Story` still needs
-to be added there to match `user_story.yml`, which already sets `type: story`.
+`Bug`, `Feature`, and `Story` are all configured and enabled on the org,
+matching the `type:` key each issue template sets.
 
 The issue templates set their Issue Type via the top-level `type:` key in
 each `.github/ISSUE_TEMPLATE/*.yml` file (not the `labels:` key). `labels.yml`
@@ -297,6 +297,84 @@ through the Development panel, with no further edit to the PR itself,
 won't trigger this workflow until the PR's next `opened`/`edited`-type
 event — there's no dedicated webhook event for "issue linked via panel"
 alone.
+
+## Project template: kanban on Work status, not project Status
+
+Projects' built-in **Status** field is per-project — every project gets its own
+copy, nothing keeps them consistent across repos, and none of the workflows
+above can write to it. The org-wide **Work status** issue field is the
+opposite: defined once, one value per issue, readable from every project and
+repo, and already driven by `qa-routing`, `issue-status-sync`, and
+`pr-linked-status`. A board here should therefore draw its columns from Work
+status and leave the project's own Status unused.
+
+That is supported: an org issue field added to a project behaves like any
+project single-select — it can be the board's **column field** as well as its
+**Group by** (swimlane) axis, and dragging a card between columns writes the
+issue field itself, which the workflows above then see.
+
+### Template shape
+
+One org-level project, configured once, then Settings → Templates → **Copy as
+template** so it shows up under `New project`.
+
+Fields on the project:
+
+| Field | Source | Role |
+|---|---|---|
+| `Work status` | org issue field | board columns — Backlog / Ready / In progress / Ready for QA / Done |
+| `Type` | native Issue Type | swimlanes — Feature / Story / Task / Bug |
+| `Priority` | org issue field | Urgent / High / Medium / Low — sort within a column |
+| `Parent issue`, `Sub-issues progress` | built-in | Feature → Story → Task roll-up |
+| `Status` | built-in project field | delete it — or hide it in every view if the project won't let it go — so nobody maintains two competing statuses |
+
+`Work status` is org-visibility **All**, but `Priority` is **Org only**, and
+org-only issue fields are hidden in projects that are public or internal — so
+either keep the project private or flip `Priority` to All in the org's issue
+field settings.
+
+Views:
+
+1. **Board** — board layout. Column field `Work status`, Group by `Type`, sort
+   by `Priority`, filter `is:issue`.
+2. **All work** — table, grouped by `Work status`, with `Priority` and
+   `Repository` visible.
+3. **QA queue** — filtered to Work status = *Ready for QA*, which is exactly
+   what `qa-routing` sets on merge.
+
+Add the org fields from a table view (`+` in the header → Add field → the org
+issue fields are listed alongside project fields); set column field and Group
+by from the board's view-options menu. Pick filter values from the suggestion
+dropdown rather than typing qualifiers — GitHub writes the qualifier itself,
+including for multi-word field names.
+
+### Why the board is filtered to `is:issue`
+
+Issue fields only populate on issues owned by this org. Pull requests, draft
+issues, and issues from other orgs have no Work status at all and would pile
+up in a "No Work status" column. `is:issue` keeps that column from existing;
+PRs are still visible on the cards through `Linked pull requests`.
+
+### Built-in project automations don't apply
+
+GitHub's built-in project workflows ("item closed → set Status to Done", "item
+added → Backlog") only ever write the *project's* Status field, so a project
+built this way leaves them inert. Nothing is lost — the three reusable
+workflows in this repo do the same jobs one level down, on the issue itself,
+which means they hold for issues that are in no project at all.
+
+### What a copy carries, and what it doesn't
+
+Copying a project (or creating one from the template) brings the views, the
+fields and their values, draft issues, insights, and configured workflows —
+**except auto-add workflows**, which are never copied. Every new project
+therefore needs its own "auto-add items from repo X" workflow wired up by
+hand.
+
+One thing to check on the first copy: whether the copied board keeps its
+columns bound to the *issue field* `Work status` rather than silently falling
+back to a project-local single select. GitHub's docs don't state either way,
+and it can't be verified through the API without the `project` token scope.
 
 ## Claude Code plugin
 
