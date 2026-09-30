@@ -25,6 +25,11 @@ health files, and a canonical label set with zero per-repo work.
     ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work-status In-progress
     └── label-sync.yml        ← Runs centrally — see "Label sync" below. CI still planned.
 
+workflow-templates/          ← Ready-made wrappers for the reusable workflows — see "Adding the wrappers to a repo"
+├── qa-routing.yml            (+ .properties.json)
+├── issue-status-sync.yml     (+ .properties.json)
+└── pr-linked-status.yml      (+ .properties.json)
+
 plugins/
 └── gh-issue-templates/      ← Claude Code plugin — see "Claude Code plugin" below
 ```
@@ -44,6 +49,18 @@ No separate workflows repo is needed for this — reusable workflows can be
 called from any repo, including this one. If workflow versioning or ownership
 ever needs to diverge from the templates/labels here, split them out then;
 until that's a real need, keeping everything in one repo is simpler.
+
+## Adding the wrappers to a repo
+
+Each wrapper is also published as an org **workflow template**
+(`workflow-templates/` at the root of this repo). In the consuming repo, go
+to **Actions → New workflow**, find the **By havit-internal** section, and
+click **Configure** on *QA routing*, *Issue status sync*, or *PR-linked issue
+status*, then commit. Nothing to copy by hand, and the `uses:` path to the
+reusable workflow can't be mistyped.
+
+The YAML snippets in the sections below are the same files — keep them and
+`workflow-templates/*.yml` in sync when changing either.
 
 ## Issue template inheritance — the gotcha
 

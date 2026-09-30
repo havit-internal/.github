@@ -1,0 +1,19 @@
+name: PR-linked issue status
+
+# Thin wrapper around the org reusable workflow. When a PR gets linked to an
+# issue, moves the issue's Work-status to In-progress (never backward).
+# See https://github.com/havit-internal/.github#pr-linked-issue-status-workflow
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, edited]
+
+jobs:
+  sync:
+    permissions:
+      issues: write
+      pull-requests: read
+      contents: read
+    uses: havit-internal/.github/.github/workflows/pr-linked-status.yml@main
+    with:
+      runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels
