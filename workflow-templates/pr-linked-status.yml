@@ -1,7 +1,9 @@
 name: PR-linked issue status
 
-# Thin wrapper around the org reusable workflow. When a PR gets linked to an
-# issue, moves the issue's Work status to In progress (never backward).
+# Thin wrapper around the org reusable workflow. When a PR linked to an issue
+# is opened, reopened, marked ready for review or edited, moves the issue's
+# Work status to In progress (never backward). A Development-panel link alone
+# triggers nothing until the PR's next such event.
 # See https://github.com/havit-internal/.github#pr-linked-issue-status-workflow
 
 on:

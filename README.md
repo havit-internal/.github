@@ -53,7 +53,7 @@ until that's a real need, keeping everything in one repo is simpler.
 
 ## Adding the wrappers to a repo
 
-Each wrapper is also published as an org **workflow template**
+Each wrapper is published as an org **workflow template**
 (`workflow-templates/` at the root of this repo). In the consuming repo, go
 to **Actions → New workflow**, find the **By havit-internal** section, and
 click **Configure** on *QA routing*, *Issue status sync*, or *PR-linked issue

@@ -1,5 +1,5 @@
 {
   "name": "PR-linked issue status",
-  "description": "When a PR is linked to an issue, sets the issue's Work status to In progress unless it's already Ready for QA or Done.",
+  "description": "When a PR linked to an issue is opened, reopened, marked ready or edited, sets the issue's Work status to In progress unless it's already Ready for QA or Done.",
   "categories": ["Automation"]
 }
