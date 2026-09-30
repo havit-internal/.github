@@ -335,6 +335,7 @@ Fields on the project:
 | `Work status` | org issue field | board columns — Backlog / Ready / In progress / Ready for QA / Done |
 | `Type` | native Issue Type | swimlanes — Feature / Story / Task / Bug |
 | `Priority` | org issue field | Urgent / High / Medium / Low — sort within a column |
+| `Iteration` | project iteration field, 1-week | sprint scoping — the `@current` / `@next` views filter on it |
 | `Parent issue`, `Sub-issues progress` | built-in | Feature → Story → Task roll-up |
 | `Status` | built-in project field | delete it — or hide it in every view if the project won't let it go — so nobody maintains two competing statuses |
 
@@ -343,14 +344,25 @@ org-only issue fields are hidden in projects that are public or internal — so
 either keep the project private or flip `Priority` to All in the org's issue
 field settings.
 
-Views:
+Views, in tab order — boards for moving work day to day, tables for planning,
+triage and bulk edits (inline edits, paste down a column, sort and group
+without dragging cards). Every view is filtered to `is:issue` and sorted by
+`Priority`:
 
-1. **Board** — board layout. Column field `Work status`, Group by `Type`, sort
-   by `Priority`, filter `is:issue`.
-2. **All work** — table, grouped by `Work status`, with `Priority` and
-   `Repository` visible.
-3. **QA queue** — filtered to Work status = *Ready for QA*, which is exactly
-   what `qa-routing` sets on merge.
+| View | Layout | Filter / setup | Who, when |
+|---|---|---|---|
+| **Current iteration** | board | `iteration:@current`; columns `Work status`, swimlanes `Type` | whole team, daily — the default view |
+| **QA queue** | table | `work-status:"Ready for QA"` — exactly what `qa-routing` sets on merge; shows `Iteration`, `Linked pull requests` | testers |
+| **Next iteration** | table | `iteration:@next`; shows `Type`, `Priority`, `Assignees`, `Sub-issues progress` | sprint planning |
+| **Backlog & triage** | table | `no:iteration -work-status:Ready,"In progress","Ready for QA",Done` — i.e. Work status empty or Backlog, no iteration | triage: set type, priority, Work status, then an iteration |
+| **Bugs** | table | `type:Bug`; shows `Labels` (for `sev:*`), `Iteration`, `Work status` | deciding which bugs go into this or the next sprint |
+| **Features** | table | `type:Feature`; shows `Sub-issues progress`, `Iteration` | product and leads: are each Feature's Stories moving? |
+| **All work** | table | no filter; grouped by `Work status` | overview and search, the catch-all |
+
+The Backlog filter excludes the other Work status values because a filter
+can't express "empty *or* Backlog" directly — if Work status gains an option,
+add it to that exclusion list. There's no roadmap view: its date axis can't be
+set through the API, so add one by hand on a project that wants a timeline.
 
 Add the org fields from a table view (`+` in the header → Add field → the org
 issue fields are listed alongside project fields); set column field and Group
@@ -358,18 +370,29 @@ by from the board's view-options menu. Pick filter values from the suggestion
 dropdown rather than typing qualifiers — GitHub writes the qualifier itself,
 including for multi-word field names.
 
-### Why the board is filtered to `is:issue`
+The views were created through the REST API
+(`POST /orgs/{org}/projectsV2/{number}/views`, token needs the `project`
+scope), which takes name, layout, filter, visible fields, sort, column field
+and Group by. Two gaps: it silently drops Group by `Type` (the native Issue
+Type isn't exposed as a groupable field), so the swimlanes on **Current
+iteration** are set by hand; and there's no call to edit an existing view's
+layout settings — GraphQL `updateProjectV2View` only changes name, filter and
+visible fields. `deleteProjectV2View` does work, which is how the default
+Table / Board / Roadmap views were removed.
+
+### Why the views are filtered to `is:issue`
 
 Issue fields only populate on issues owned by this org. Pull requests, draft
 issues, and issues from other orgs have no Work status at all and would pile
 up in a "No Work status" column. `is:issue` keeps them off the board; PRs are
 still visible on the cards through `Linked pull requests`.
 
-That column doesn't disappear entirely, though, and shouldn't. Nothing sets a
-Work status when an issue is created — the templates here set only a `type:` —
-so a fresh issue has no value and lands in "No Work status" until someone
-picks one. Treat that column as the intake lane: everything in it is
-untriaged, and triage means dragging it into Backlog or Ready.
+Issues themselves can still lack a value. Nothing sets a Work status or an
+Iteration when an issue is created — the templates here set only a `type:` —
+so a fresh issue never reaches **Current iteration**; it shows up in **Backlog
+& triage**. That view is the intake lane: everything in it with an empty Work
+status is untriaged, and triage means setting type, priority and Work status,
+then an iteration.
 
 ### Which built-in project automations still apply
 
