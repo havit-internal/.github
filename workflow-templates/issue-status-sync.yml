@@ -1,7 +1,7 @@
 name: Issue status sync
 
 # Thin wrapper around the org reusable workflow. Keeps an issue's closed state
-# and its Work-status field (Done) in sync, both directions.
+# and its Work status field (Done) in sync, both directions.
 # See https://github.com/havit-internal/.github#issue-status-sync-workflow
 
 on:
@@ -15,4 +15,5 @@ jobs:
       contents: read
     uses: havit-internal/.github/.github/workflows/issue-status-sync.yml@main
     with:
-      runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels
+      runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels.
+                                    # Self-hosted needs Actions Runner v2.327.1+

@@ -1,5 +1,5 @@
 {
   "name": "QA routing",
-  "description": "On PR merge, sets Work-status to Ready for QA on every linked issue and assigns the repo's QAOWNERS.",
+  "description": "On PR merge, sets Work status to Ready for QA on every linked issue and assigns the repo's QAOWNERS.",
   "categories": ["Automation"]
 }

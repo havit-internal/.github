@@ -1,7 +1,7 @@
 name: QA routing
 
 # Thin wrapper around the org reusable workflow. On merge, routes every issue
-# the PR closes to QA (Work-status → Ready for QA, assigns .github/QAOWNERS).
+# the PR closes to QA (Work status → Ready for QA, assigns .github/QAOWNERS).
 # See https://github.com/havit-internal/.github#qa-routing-workflow
 
 on:
@@ -17,4 +17,5 @@ jobs:
       contents: read
     uses: havit-internal/.github/.github/workflows/qa-routing.yml@main
     with:
-      runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels
+      runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels.
+                                    # Self-hosted needs Actions Runner v2.327.1+
