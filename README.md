@@ -346,8 +346,8 @@ field settings.
 
 Views, in tab order — boards for moving work day to day, tables for planning,
 triage and bulk edits (inline edits, paste down a column, sort and group
-without dragging cards). Every view is filtered to `is:issue` and sorted by
-`Priority`:
+without dragging cards). Every view is sorted by `Priority`, and every view
+except **All work** is also filtered to `is:issue`:
 
 | View | Layout | Filter / setup | Who, when |
 |---|---|---|---|
@@ -357,7 +357,7 @@ without dragging cards). Every view is filtered to `is:issue` and sorted by
 | **Backlog & triage** | table | `no:iteration -work-status:Ready,"In progress","Ready for QA",Done` — i.e. Work status empty or Backlog, no iteration | triage: set type, priority, Work status, then an iteration |
 | **Bugs** | table | `type:Bug`; shows `Labels` (for `sev:*`), `Iteration`, `Work status` | deciding which bugs go into this or the next sprint |
 | **Features** | table | `type:Feature`; shows `Sub-issues progress`, `Iteration` | product and leads: are each Feature's Stories moving? |
-| **All work** | table | no filter; grouped by `Work status` | overview and search, the catch-all |
+| **All work** | table | no filter at all — deliberately includes PRs and drafts; grouped by `Work status` | overview and search, the catch-all |
 
 The Backlog filter excludes the other Work status values because a filter
 can't express "empty *or* Backlog" directly — if Work status gains an option,
@@ -371,8 +371,9 @@ dropdown rather than typing qualifiers — GitHub writes the qualifier itself,
 including for multi-word field names.
 
 The views were created through the REST API
-(`POST /orgs/{org}/projectsV2/{number}/views`, token needs the `project`
-scope), which takes name, layout, filter, visible fields, sort, column field
+(`POST /orgs/{org}/projectsV2/{number}/views`; a classic token or `gh` login
+needs the `project` scope, a fine-grained token or GitHub App needs the
+organization **Projects** read-and-write permission), which takes name, layout, filter, visible fields, sort, column field
 and Group by. Two gaps: it silently drops Group by `Type` (the native Issue
 Type isn't exposed as a groupable field), so the swimlanes on **Current
 iteration** are set by hand; and there's no call to edit an existing view's
@@ -384,8 +385,11 @@ Table / Board / Roadmap views were removed.
 
 Issue fields only populate on issues owned by this org. Pull requests, draft
 issues, and issues from other orgs have no Work status at all and would pile
-up in a "No Work status" column. `is:issue` keeps them off the board; PRs are
-still visible on the cards through `Linked pull requests`.
+up in a "No Work status" column. `is:issue` keeps PRs and drafts off the
+board; PRs are still visible on the cards through `Linked pull requests`.
+`is:issue` does not exclude issues from other orgs, though — if one is added
+to the project it still shows up without a Work status. Auto-add only pulls
+from this org's repos, so that takes adding one by hand.
 
 Issues themselves can still lack a value. Nothing sets a Work status or an
 Iteration when an issue is created — the templates here set only a `type:` —
