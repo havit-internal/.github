@@ -4,7 +4,7 @@ name: QA routing
 # Reads the merged PR's "closing issues" — the same set GitHub computes for
 # the PR's Development panel, whether linked via a Closes/Fixes/Resolves #N
 # keyword in the body OR via the manual "link a pull request" UI — sets the
-# org-wide "Work-status" issue field to "Ready for QA" on those issues, and
+# org-wide "Work status" issue field to "Ready for QA" on those issues, and
 # assigns everyone listed in that repo's .github/QAOWNERS. See README.md for
 # the wrapper snippet and QAOWNERS format.
 
@@ -12,7 +12,10 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]'
+        # Self-hosted runners must be on Actions Runner v2.327.1 or newer —
+        # actions/github-script v8+ (and actions/checkout v5+) refuse to start
+        # on anything older. Hosted runners are always new enough.
+        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]. Self-hosted runners need Actions Runner v2.327.1+.'
         type: string
         default: '["ubuntu-latest"]'
 
@@ -26,7 +29,7 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner) }}
     steps:
       - name: Set QA field and assign linked issues
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             // closingIssuesReferences is GitHub's own resolved list of issues this PR
@@ -88,13 +91,13 @@ jobs:
                 .map(l => l.replace(/^@/, ''));
             } catch (err) {
               if (err.status === 404) {
-                core.warning('No .github/QAOWNERS file in this repo — Work-status will be set but issues left unassigned.');
+                core.warning('No .github/QAOWNERS file in this repo — Work status will be set but issues left unassigned.');
               } else {
                 throw err;
               }
             }
 
-            // Org-wide "Work-status" issue field (single select) and its options.
+            // Org-wide "Work status" issue field (single select) and its options.
             // These are node IDs, not names — GraphQL single-select fields are set
             // by option ID, not by string. Looked up via repository.issueFields for
             // havit-internal/.github; re-fetch and update these constants if the
