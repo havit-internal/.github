@@ -45,7 +45,8 @@ Templates from this repo are **inherited** by every repo in the org that does
 not define its own. Workflow files are **not** inherited — a reusable workflow
 defined here still has to be called explicitly from a thin wrapper in each
 consuming repo (`uses: havit-internal/.github/.github/workflows/<name>.yml@main`).
-No separate workflows repo is needed for this — reusable workflows can be
+Those wrappers can be added through the GitHub UI (Actions → New workflow) —
+see "Adding the wrappers to a repo" below. No separate workflows repo is needed for this — reusable workflows can be
 called from any repo, including this one. If workflow versioning or ownership
 ever needs to diverge from the templates/labels here, split them out then;
 until that's a real need, keeping everything in one repo is simpler.
@@ -181,7 +182,8 @@ picked up exactly like a `Fixes #N` in the text — no body parsing involved.
 
 `.github/workflows/qa-routing.yml` is a reusable workflow. It does not run on its own —
 each consuming repo needs a thin wrapper that triggers it on merge:
-[`workflow-templates/qa-routing.yml`](workflow-templates/qa-routing.yml).
+[`workflow-templates/qa-routing.yml`](workflow-templates/qa-routing.yml). Add it through the UI:
+Actions → New workflow → By havit-internal → Configure.
 
 **Self-hosted runners need Actions Runner v2.327.1 or newer.** These workflows
 run `actions/github-script` v9 (and `label-sync` runs `actions/checkout` v7),
@@ -241,7 +243,8 @@ it shows up the same everywhere).
 `.github/workflows/issue-status-sync.yml` is a reusable workflow that keeps
 an issue's open/closed state and its **Work status** field in sync, in both
 directions. Wrapper:
-[`workflow-templates/issue-status-sync.yml`](workflow-templates/issue-status-sync.yml).
+[`workflow-templates/issue-status-sync.yml`](workflow-templates/issue-status-sync.yml). Add it through the UI:
+Actions → New workflow → By havit-internal → Configure.
 
 What it does:
 - **Issue closed as completed** → sets Work status to **Done**. A close with
@@ -261,7 +264,8 @@ the other — it settles after at most one harmless extra run.
 an issue's **Work status** to **In progress** as soon as a PR is linked to
 it — same `closingIssuesReferences` detection as `qa-routing.yml` (body
 keyword or Development panel link, either way). Wrapper:
-[`workflow-templates/pr-linked-status.yml`](workflow-templates/pr-linked-status.yml).
+[`workflow-templates/pr-linked-status.yml`](workflow-templates/pr-linked-status.yml). Add it through the UI:
+Actions → New workflow → By havit-internal → Configure.
 
 It skips issues whose Work status is already **Ready for QA** or **Done**,
 so it never walks status backward (e.g. a small follow-up PR after QA
