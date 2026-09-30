@@ -1,0 +1,5 @@
+{
+  "name": "QA routing",
+  "description": "On PR merge, sets Work status to Ready for QA on every linked issue and assigns the repo's QAOWNERS. Issues labeled skip-qa go straight to Done and are closed.",
+  "categories": ["Automation"]
+}

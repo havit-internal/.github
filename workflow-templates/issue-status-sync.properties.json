@@ -1,0 +1,5 @@
+{
+  "name": "Issue status sync",
+  "description": "Closing an issue as completed sets Work status to Done, and setting Work status to Done closes the issue.",
+  "categories": ["Automation"]
+}
