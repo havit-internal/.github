@@ -59,8 +59,12 @@ click **Configure** on *QA routing*, *Issue status sync*, or *PR-linked issue
 status*, then commit. Nothing to copy by hand, and the `uses:` path to the
 reusable workflow can't be mistyped.
 
-The YAML snippets in the sections below are the same files — keep them and
-`workflow-templates/*.yml` in sync when changing either.
+`workflow-templates/*.yml` is the single source for the wrapper YAML — the
+sections below describe what each workflow does and link there instead of
+repeating it. Without the UI, copy the file into the consuming repo's
+`.github/workflows/` under the same name. The only knob is the optional
+`runner` input: a JSON array of runner labels, default `'["ubuntu-latest"]'`,
+e.g. `'["self-hosted","on-prem"]'`.
 
 ## Issue template inheritance — the gotcha
 
@@ -177,28 +181,7 @@ picked up exactly like a `Fixes #N` in the text — no body parsing involved.
 
 `.github/workflows/qa-routing.yml` is a reusable workflow. It does not run on its own —
 each consuming repo needs a thin wrapper that triggers it on merge:
-
-```yaml
-# .github/workflows/qa-routing.yml (in the consuming repo)
-name: QA routing
-
-on:
-  pull_request:
-    types: [closed]
-
-jobs:
-  route-to-qa:
-    if: github.event.pull_request.merged == true
-    permissions:
-      issues: write
-      pull-requests: read
-      contents: read
-    uses: havit-internal/.github/.github/workflows/qa-routing.yml@main
-    with:
-      runner: '["ubuntu-latest"]'   # optional — defaults to this. JSON array
-                                    # of runner labels, e.g. '["self-hosted","on-prem"]'
-                                    # Self-hosted? See the runner floor below.
-```
+[`workflow-templates/qa-routing.yml`](workflow-templates/qa-routing.yml).
 
 **Self-hosted runners need Actions Runner v2.327.1 or newer.** These workflows
 run `actions/github-script` v9 (and `label-sync` runs `actions/checkout` v7),
@@ -258,25 +241,7 @@ it shows up the same everywhere).
 `.github/workflows/issue-status-sync.yml` is a reusable workflow that keeps
 an issue's open/closed state and its **Work status** field in sync, in both
 directions. Wrapper:
-
-```yaml
-# .github/workflows/issue-status-sync.yml (in the consuming repo)
-name: Issue status sync
-
-on:
-  issues:
-    types: [closed, field_added]
-
-jobs:
-  sync:
-    permissions:
-      issues: write
-      contents: read
-    uses: havit-internal/.github/.github/workflows/issue-status-sync.yml@main
-    with:
-      runner: '["ubuntu-latest"]'   # optional — defaults to this
-                                    # Self-hosted needs runner v2.327.1+
-```
+[`workflow-templates/issue-status-sync.yml`](workflow-templates/issue-status-sync.yml).
 
 What it does:
 - **Issue closed as completed** → sets Work status to **Done**. A close with
@@ -296,26 +261,7 @@ the other — it settles after at most one harmless extra run.
 an issue's **Work status** to **In progress** as soon as a PR is linked to
 it — same `closingIssuesReferences` detection as `qa-routing.yml` (body
 keyword or Development panel link, either way). Wrapper:
-
-```yaml
-# .github/workflows/pr-linked-status.yml (in the consuming repo)
-name: PR-linked issue status
-
-on:
-  pull_request:
-    types: [opened, reopened, ready_for_review, edited]
-
-jobs:
-  sync:
-    permissions:
-      issues: write
-      pull-requests: read
-      contents: read
-    uses: havit-internal/.github/.github/workflows/pr-linked-status.yml@main
-    with:
-      runner: '["ubuntu-latest"]'   # optional — defaults to this
-                                    # Self-hosted needs runner v2.327.1+
-```
+[`workflow-templates/pr-linked-status.yml`](workflow-templates/pr-linked-status.yml).
 
 It skips issues whose Work status is already **Ready for QA** or **Done**,
 so it never walks status backward (e.g. a small follow-up PR after QA
