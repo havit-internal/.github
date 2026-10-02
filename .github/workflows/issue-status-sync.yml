@@ -71,10 +71,13 @@ jobs:
               );
             }
 
-            // The merged PR that closed this issue, or null if it was closed by
-            // hand, by a commit, or the close can't be attributed. `closer` is
-            // the Closer union (Commit | PullRequest | ProjectV2), so only the
-            // PullRequest fragment yields a number.
+            // The merged PR in this same repo that closed this issue, or null if
+            // it was closed by hand, by a commit, by a PR in another repo, or the
+            // close can't be attributed. `closer` is the Closer union (Commit |
+            // PullRequest | ProjectV2), so only the PullRequest fragment yields a
+            // number. Cross-repo PRs don't count: this repo's qa-routing never
+            // sees their merge, and the PR repo's qa-routing skips cross-repo
+            // issues, so nothing else would set Work status.
             async function getClosingMergedPr(issue_number) {
               const { repository } = await github.graphql(
                 `query($owner: String!, $repo: String!, $number: Int!) {
@@ -84,7 +87,11 @@ jobs:
                         nodes {
                           ... on ClosedEvent {
                             closer {
-                              ... on PullRequest { number merged }
+                              ... on PullRequest {
+                                number
+                                merged
+                                repository { nameWithOwner }
+                              }
                             }
                           }
                         }
@@ -99,12 +106,22 @@ jobs:
                 }
               );
               const closer = repository.issue.timelineItems.nodes[0]?.closer;
-              return closer && closer.merged ? closer.number : null;
+              const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
+              return closer && closer.merged && closer.repository.nameWithOwner === sameRepo
+                ? closer.number
+                : null;
             }
 
             // Whether any workflow on this repo's default branch calls the
             // qa-routing reusable workflow. Only then is there something else
-            // that will set Work status on a PR-closed issue.
+            // that will set Work status on a PR-closed issue. Matches a real
+            // `uses:` line, so a commented-out caller or a mention inside a
+            // script doesn't count.
+            const QA_ROUTING_USES_LINE = new RegExp(
+              `^\\s*uses:\\s*['"]?${QA_ROUTING_USES.replace(/[.\/]/g, '\\$&')}@`,
+              'm'
+            );
+
             async function repoRunsQaRouting() {
               let files;
               try {
@@ -124,7 +141,7 @@ jobs:
                   repo: context.repo.repo,
                   path: f.path,
                 });
-                if (Buffer.from(data.content, 'base64').toString('utf8').includes(QA_ROUTING_USES)) {
+                if (QA_ROUTING_USES_LINE.test(Buffer.from(data.content, 'base64').toString('utf8'))) {
                   return true;
                 }
               }
@@ -225,6 +242,19 @@ jobs:
             }
 
             if (context.payload.action === 'reopened') {
+              // The event can be queued behind a re-close. Act on the issue's
+              // live state, not the payload's, or a closed issue ends up
+              // In progress.
+              const { data: liveIssue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+              });
+              if (liveIssue.state !== 'open') {
+                core.info(`Issue #${issue_number} was closed again before this run — nothing to walk back.`);
+                return;
+              }
+
               const currentStatus = await getWorkStatus(issue_number);
               if (!REOPEN_FROM_STATUS.includes(currentStatus)) {
                 core.info(`Issue #${issue_number} reopened with Work status "${currentStatus ?? '(unset)'}" — nothing to walk back.`);

@@ -254,11 +254,14 @@ What it does:
   `qa-routing` (Ready for QA, or Done for `skip-qa`). Both workflows fire on
   the same merge, so without this the issue could end up Done and skip QA,
   depending on which run finished last. "Runs `qa-routing`" means a workflow
-  file on the default branch calls the `qa-routing.yml` reusable workflow; a
-  repo without one still gets Done on a PR close.
+  file on the default branch has a `uses:` line calling the `qa-routing.yml`
+  reusable workflow; a repo without one still gets Done on a PR close. Only a
+  PR in the same repo counts — `qa-routing` skips cross-repo issues, so an
+  issue closed by another repo's PR still gets Done here.
 - **Issue reopened** → if Work status is **Done** or **Ready for QA**, sets
   it to **In progress** — typically QA rejecting a fix. Any other status is
-  left as is.
+  left as is, and so is an issue that was closed again before the run got to
+  it.
 - **Work status set to Done** (the `field_added` activity type, which GitHub
   fires whenever any issue field value is set or changed) → closes the
   issue as completed.
