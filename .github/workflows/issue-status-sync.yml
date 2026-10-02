@@ -3,8 +3,10 @@ name: Issue status sync
 # Reusable workflow — called from a thin wrapper in each consuming repo.
 # Keeps the org-wide "Work status" issue field in sync with the issue's
 # open/closed state, in both directions:
-#   - closing an issue as completed sets Work status to Done
+#   - closing an issue as completed sets Work status to Done (unless a merged
+#     PR closed it and the repo runs qa-routing — see the `closed` branch)
 #   - setting Work status to Done closes the issue
+#   - reopening an issue that's Done or Ready for QA moves it to In progress
 # Each direction checks the other side's current state first, so a change
 # made by one direction doesn't bounce back and forth — it settles after at
 # most one extra (no-op) hop.
@@ -32,14 +34,102 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            // Org-wide "Work status" issue field (single select) and its "Done"
-            // option. Node IDs, not names — GraphQL single-select fields are set
+            // Org-wide "Work status" issue field (single select) and the options
+            // this workflow sets. Node IDs, not names — GraphQL single-select fields are set
             // by option ID, not by string. Looked up via repository.issueFields
             // for havit-internal/.github; re-fetch and update if the field or
             // option is ever recreated (a recreate mints new IDs even if the
             // name is unchanged).
             const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
             const DONE_OPTION_ID = 'IFSSO_kgDOBJz3hQ';
+            const IN_PROGRESS_OPTION_ID = 'IFSSO_kgDOBJz3gg';
+
+            // Statuses a reopen walks back to In progress — the issue was
+            // finished (or handed to QA) and someone says it isn't, e.g. a QA
+            // rejection.
+            const REOPEN_FROM_STATUS = ['Done', 'Ready for QA'];
+
+            // The reusable workflow a repo's qa-routing wrapper calls. Used to
+            // tell whether this repo routes merged PRs to QA at all.
+            const QA_ROUTING_USES = 'havit-internal/.github/.github/workflows/qa-routing.yml';
+
+            async function setWorkStatus(optionId) {
+              await github.graphql(
+                `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
+                  setIssueFieldValue(input: {
+                    issueId: $issueId,
+                    issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
+                  }) {
+                    issue { id }
+                  }
+                }`,
+                {
+                  issueId: context.payload.issue.node_id,
+                  fieldId: WORK_STATUS_FIELD_ID,
+                  optionId,
+                }
+              );
+            }
+
+            // The merged PR that closed this issue, or null if it was closed by
+            // hand, by a commit, or the close can't be attributed. `closer` is
+            // the Closer union (Commit | PullRequest | ProjectV2), so only the
+            // PullRequest fragment yields a number.
+            async function getClosingMergedPr(issue_number) {
+              const { repository } = await github.graphql(
+                `query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    issue(number: $number) {
+                      timelineItems(itemTypes: [CLOSED_EVENT], last: 1) {
+                        nodes {
+                          ... on ClosedEvent {
+                            closer {
+                              ... on PullRequest { number merged }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }`,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  number: issue_number,
+                }
+              );
+              const closer = repository.issue.timelineItems.nodes[0]?.closer;
+              return closer && closer.merged ? closer.number : null;
+            }
+
+            // Whether any workflow on this repo's default branch calls the
+            // qa-routing reusable workflow. Only then is there something else
+            // that will set Work status on a PR-closed issue.
+            async function repoRunsQaRouting() {
+              let files;
+              try {
+                ({ data: files } = await github.rest.repos.getContent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  path: '.github/workflows',
+                }));
+              } catch (err) {
+                if (err.status === 404) return false;
+                throw err;
+              }
+              for (const f of files) {
+                if (f.type !== 'file' || !/\.ya?ml$/.test(f.name)) continue;
+                const { data } = await github.rest.repos.getContent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  path: f.path,
+                });
+                if (Buffer.from(data.content, 'base64').toString('utf8').includes(QA_ROUTING_USES)) {
+                  return true;
+                }
+              }
+              return false;
+            }
 
             async function getWorkStatus(issue_number) {
               // `field` on IssueFieldSingleSelectValue is the IssueFields union —
@@ -89,27 +179,24 @@ jobs:
                 return;
               }
 
+              // A merge with `Fixes #N` closes the issue AND triggers qa-routing,
+              // which sets Ready for QA (or Done for skip-qa). The two runs race,
+              // and checking the current status here doesn't help — qa-routing
+              // may not have written yet. So when a merged PR did the closing
+              // and the repo runs qa-routing, leave Work status to it entirely.
+              const closingPr = await getClosingMergedPr(issue_number);
+              if (closingPr !== null && await repoRunsQaRouting()) {
+                core.info(`Issue #${issue_number} was closed by merged PR #${closingPr} — qa-routing sets Work status, leaving it alone.`);
+                return;
+              }
+
               const currentStatus = await getWorkStatus(issue_number);
               if (currentStatus === 'Done') {
                 core.info(`Issue #${issue_number} Work status is already Done — nothing to do.`);
                 return;
               }
 
-              await github.graphql(
-                `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
-                  setIssueFieldValue(input: {
-                    issueId: $issueId,
-                    issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
-                  }) {
-                    issue { id }
-                  }
-                }`,
-                {
-                  issueId: context.payload.issue.node_id,
-                  fieldId: WORK_STATUS_FIELD_ID,
-                  optionId: DONE_OPTION_ID,
-                }
-              );
+              await setWorkStatus(DONE_OPTION_ID);
               core.info(`Issue #${issue_number} closed as completed — set Work status to Done.`);
               return;
             }
@@ -134,6 +221,18 @@ jobs:
                 state_reason: 'completed',
               });
               core.info(`Issue #${issue_number} Work status set to Done — closed the issue.`);
+              return;
+            }
+
+            if (context.payload.action === 'reopened') {
+              const currentStatus = await getWorkStatus(issue_number);
+              if (!REOPEN_FROM_STATUS.includes(currentStatus)) {
+                core.info(`Issue #${issue_number} reopened with Work status "${currentStatus ?? '(unset)'}" — nothing to walk back.`);
+                return;
+              }
+
+              await setWorkStatus(IN_PROGRESS_OPTION_ID);
+              core.info(`Issue #${issue_number} reopened from ${currentStatus} — set Work status to In progress.`);
               return;
             }
 

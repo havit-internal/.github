@@ -1,5 +1,5 @@
 {
   "name": "Issue status sync",
-  "description": "Closing an issue as completed sets Work status to Done, and setting Work status to Done closes the issue.",
+  "description": "Closing an issue as completed sets Work status to Done, setting Work status to Done closes the issue, and reopening a Done or Ready for QA issue sets it to In progress.",
   "categories": ["Automation"]
 }
