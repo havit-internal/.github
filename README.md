@@ -21,7 +21,7 @@ health files, and a canonical label set with zero per-repo work.
 ├── labels.yml               ← Source of truth for sev:*/meta labels (work type is an Issue Type, not a label; workflow status is the Work status issue field, not a label)
 └── workflows/
     ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below.
-    ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work status Done, both directions
+    ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work status Done, both directions; reopened → In progress
     ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work status In progress
     └── label-sync.yml        ← Runs centrally — see "Label sync" below. CI still planned.
 
@@ -249,7 +249,19 @@ Actions → New workflow → By havit-internal → Configure.
 What it does:
 - **Issue closed as completed** → sets Work status to **Done**. A close with
   any other reason (won't-fix, duplicate) is left alone — "Done" implies
-  actual completion, not "not planned".
+  actual completion, not "not planned". **Exception:** if a merged PR closed
+  the issue and the repo also runs `qa-routing`, Work status is left to
+  `qa-routing` (Ready for QA, or Done for `skip-qa`). Both workflows fire on
+  the same merge, so without this the issue could end up Done and skip QA,
+  depending on which run finished last. "Runs `qa-routing`" means a workflow
+  file on the default branch has a `uses:` line calling the `qa-routing.yml`
+  reusable workflow; a repo without one still gets Done on a PR close. Only a
+  PR in the same repo counts — `qa-routing` skips cross-repo issues, so an
+  issue closed by another repo's PR still gets Done here.
+- **Issue reopened** → if Work status is **Done** or **Ready for QA**, sets
+  it to **In progress** — typically QA rejecting a fix. Any other status is
+  left as is, and so is an issue that was closed again before the run got to
+  it.
 - **Work status set to Done** (the `field_added` activity type, which GitHub
   fires whenever any issue field value is set or changed) → closes the
   issue as completed.

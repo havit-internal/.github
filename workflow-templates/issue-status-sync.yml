@@ -1,12 +1,13 @@
 name: Issue status sync
 
 # Thin wrapper around the org reusable workflow. Keeps an issue's closed state
-# and its Work status field (Done) in sync, both directions.
+# and its Work status field (Done) in sync, both directions, and walks a
+# reopened issue back to In progress.
 # See https://github.com/havit-internal/.github#issue-status-sync-workflow
 
 on:
   issues:
-    types: [closed, field_added]
+    types: [closed, reopened, field_added]
 
 jobs:
   sync:
