@@ -159,11 +159,17 @@ labels to every other repo in the org. To set it up:
 The `qa-routing` workflow (see below) piggybacks on GitHub's own closing
 keywords instead of inventing a separate one. Use `Closes #N`, `Fixes #N`,
 or `Resolves #N` — anywhere in the PR description, one or several
-comma-separated (`Fixes #10, #11`) — for every issue this PR fixes. GitHub
-auto-closes those issues on merge, and the workflow, in the same run, sets
-the org-wide **Work status** issue field to **Ready for QA** and assigns
-everyone in `.github/QAOWNERS`, so the issue doesn't just quietly close —
-it still gets a QA pass.
+comma-separated (`Fixes #10, #11`) — for every issue this PR fixes. Here
+the keyword only *links* the issue: our repos have GitHub's auto-close of
+linked issues on merge turned off, so the merge does **not** close it.
+
+On merge, `qa-routing` sets the org-wide **Work status** issue field to
+**Ready for QA** and assigns everyone in `.github/QAOWNERS`; the issue stays
+open. It gets closed only when it's actually done — when QA sets Work status
+to **Done**, `issue-status-sync` closes it (and closing it by hand as
+completed sets Done). If QA rejects the fix, set Work status back to
+**In progress**. The one exception is a `skip-qa` issue, which `qa-routing`
+sets to Done and closes itself — see below.
 
 You don't have to type a keyword at all — linking an issue via the PR's
 **Development** panel (the "Link a pull request"/"Link an issue" UI) works
@@ -172,11 +178,11 @@ for the PR, the same data that panel displays, so a manually linked issue is
 picked up exactly like a `Fixes #N` in the text — no body parsing involved.
 
 - `Closes #N` / `Fixes #N` / `Resolves #N` in the body, **or** a manual link
-  in the Development panel — This PR fixes issue N. Closed by GitHub and
-  routed to QA on merge.
-- `Refs #N` — Related issue, no action. Cross-link only, not auto-closed, not
-  routed to QA (plain text mentions never appear in `closingIssuesReferences`
-  unless linked one of the two ways above).
+  in the Development panel — This PR fixes issue N. On merge, set to
+  Ready for QA by `qa-routing`; stays open until QA moves it to Done.
+- `Refs #N` — Related issue, no action. Cross-link only, not routed to QA
+  (plain text mentions never appear in `closingIssuesReferences` unless
+  linked one of the two ways above).
 
 ## QA routing workflow
 
