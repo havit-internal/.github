@@ -1,0 +1,24 @@
+name: Sub-issue status rollup
+
+# Thin wrapper around the org reusable workflow. Rolls a parent issue's Work
+# status up from its native sub-issues: any child started → parent In progress,
+# all children Done → parent Done. Forward-only, child → parent only. Status
+# changes (field_added) and child closes drive it; the sub-issue events catch
+# re-parenting.
+# See https://github.com/havit-internal/.github#sub-issue-status-rollup-workflow
+
+on:
+  issues:
+    types: [closed, field_added,
+            sub_issue_added, sub_issue_removed,
+            parent_issue_added, parent_issue_removed]
+
+jobs:
+  rollup:
+    permissions:
+      issues: write
+      contents: read
+    uses: havit-internal/.github/.github/workflows/subissue-rollup.yml@main
+    with:
+      runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels.
+                                    # Self-hosted needs Actions Runner v2.327.1+

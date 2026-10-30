@@ -1,0 +1,5 @@
+{
+  "name": "Sub-issue status rollup",
+  "description": "Rolls a parent issue's Work status up from its native sub-issues: any child started sets the parent to In progress, all children Done sets it to Done. Child to parent only, forward-only.",
+  "categories": ["Automation"]
+}

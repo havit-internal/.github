@@ -23,12 +23,14 @@ health files, and a canonical label set with zero per-repo work.
     ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below.
     ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work status Done, both directions; reopened → In progress
     ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work status In progress
+    ├── subissue-rollup.yml   ← Reusable workflow — child Task/Bug status rolls up to parent Story/Feature
     └── label-sync.yml        ← Runs centrally — see "Label sync" below. CI still planned.
 
 workflow-templates/          ← Ready-made wrappers for the reusable workflows — see "Adding the wrappers to a repo"
 ├── qa-routing.yml            (+ .properties.json)
 ├── issue-status-sync.yml     (+ .properties.json)
-└── pr-linked-status.yml      (+ .properties.json)
+├── pr-linked-status.yml      (+ .properties.json)
+└── subissue-rollup.yml       (+ .properties.json)
 
 plugins/
 └── gh-issue-templates/      ← Claude Code plugin — see "Claude Code plugin" below
@@ -38,7 +40,7 @@ plugins/
 
 | Repo | Role |
 |------|------|
-| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `.github/labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml`, `issue-status-sync.yml`, `pr-linked-status.yml`, and `label-sync.yml` built; CI still planned). |
+| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `.github/labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml`, `issue-status-sync.yml`, `pr-linked-status.yml`, `subissue-rollup.yml`, and `label-sync.yml` built; CI still planned). |
 | `havit-internal/002.HFW-NewProjectTemplate-Blazor` | GitHub template repo for new Blazor projects. Not org-wide — covers the Blazor stack specifically, not every repo type. |
 
 Templates from this repo are **inherited** by every repo in the org that does
@@ -292,6 +294,85 @@ through the Development panel, with no further edit to the PR itself,
 won't trigger this workflow until the PR's next `opened`/`edited`-type
 event — there's no dedicated webhook event for "issue linked via panel"
 alone.
+
+## Sub-issue status rollup workflow
+
+`.github/workflows/subissue-rollup.yml` is a reusable workflow that rolls a
+parent issue's **Work status** up from its children — Task/Bug statuses roll
+up to their Story, Story statuses roll up to their Feature. It's the only
+workflow here that acts on the Feature → Story → Task hierarchy; the other
+three act on one issue at a time. Wrapper:
+[`workflow-templates/subissue-rollup.yml`](workflow-templates/subissue-rollup.yml). Add it through the UI:
+Actions → New workflow → By havit-internal → Configure.
+
+The rollup rule (child → parent only, never parent → child):
+
+| State of the children | Parent Work status |
+|-----------------------|--------------------|
+| No sub-issues | left alone — behaves as a normal issue under the other workflows |
+| All still Backlog/unset | left alone |
+| Any started (In progress / Ready for QA / Done), not all Done | **In progress** |
+| **All** children Done | **Done**, and the parent is closed as completed |
+
+**"Done" means the child's Work status is Done** — not merely closed. A task
+closed by a merged PR but still at **Ready for QA** (what `qa-routing` sets on
+merge) counts as *started*, not done, so merging the last task can't mark a
+Story done before QA has signed off. This does assume the repo also runs
+`issue-status-sync`, which is what sets Work status to Done when an issue is
+closed as completed.
+
+Key behaviours:
+
+- **Native sub-issues only.** Rollup reads GitHub's `issue.parent` /
+  `issue.subIssues`, so children must be linked with the **sub-issue UI/API**,
+  not just a `#123` mention in the description. The manual-mention convention
+  in "Feature → Story → Task hierarchy" above is fine for navigation but is
+  invisible to this workflow.
+- **Self-contained — it closes the parent and climbs the tree itself.** A field
+  written with the default `GITHUB_TOKEN` does **not** trigger further workflow
+  runs, so rollup can't lean on `issue-status-sync` to close a parent it marks
+  Done, nor on a re-fired rollup to climb Story → Feature. It therefore closes a
+  Done parent itself and walks the ancestor chain **within the same run** (a
+  `visited` set stops it looping). So the last child reaching Done closes the
+  Story *and* rolls that up into the Feature in one go.
+- **Forward-only.** It only ever advances a parent toward Done, matching
+  `pr-linked-status.yml`'s "never walk backward" stance. A child reopening
+  under an already-closed parent does **not** reopen the parent — that's left
+  to a human (or to `issue-status-sync`, if the parent itself is reopened).
+  This is the deliberate cost of having no Story-level QA step; if it ever
+  bites, a `Ready for QA` intermediate for parents can be added without a
+  redesign.
+- **"Not planned" children are excluded.** A child closed as won't-fix or
+  duplicate is dropped from the rollup, so it can neither block the parent
+  from reaching Done nor count as progress.
+- **Same-repo only.** Sub-issues can cross repositories, but — like
+  `qa-routing` / `pr-linked-status` — a parent or child in another repo is
+  skipped: its events fire in that repo, and a run here can only read and write
+  issues in its own.
+
+What drives it: the wrapper triggers on a child's `closed` and `field_added`
+(a Work status change) — the status/close events that actually move the
+rollup — plus the `sub_issue_*` / `parent_issue_*` events, which catch a child
+being re-parented without any status change. The **Work status field IDs** are
+the same hardcoded field/option node IDs as the other workflows — see the note
+under "QA routing workflow".
+
+**Concurrency caveat:** two status changes on *different children of the same
+parent* can run concurrently and race on the parent's status — one run computes
+Done while another computes In progress, and the forward-only guard only sees
+its own snapshot, so the later writer can still move the parent back within that
+narrow window. Each run recomputes from the parent's live children, so the next
+event on that parent self-corrects; a hard guarantee would need a per-parent
+lock that GitHub Actions can't express. Low-volume issue traffic makes this
+rare, but it's a known limitation rather than a solved problem.
+
+**Rollout — pilot first.** Like the other reusable workflows, this does
+nothing until a consuming repo adds the wrapper. Add it to **one** repo first
+(Actions → New workflow → *Sub-issue status rollup* → Configure), exercise the
+hierarchy there — start a child → the Story goes In progress; finish all
+children → the Story goes Done and closes; same again up to the Feature — and
+only then add it to the other repos. Nothing in this repo changes to onboard
+another repo; it's wrapper-only, per repo.
 
 ## Project template: kanban on Work status, not project Status
 
