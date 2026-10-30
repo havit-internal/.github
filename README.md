@@ -350,9 +350,10 @@ Key behaviours:
   skipped: its events fire in that repo, and a run here can only read and write
   issues in its own.
 
-What drives it: the wrapper triggers on a child's `closed` and `field_added`
-(a Work status change) — the status/close events that actually move the
-rollup — plus the `sub_issue_*` / `parent_issue_*` events, which catch a child
+What drives it: the wrapper triggers on a child's `closed`, `reopened` and
+`field_added` (a Work status change) — the status/close events that actually
+move the rollup; a reopen matters because it brings a child closed as not
+planned back into the count without any field write — plus the `sub_issue_*` / `parent_issue_*` events, which catch a child
 being re-parented without any status change. The **Work status field IDs** are
 the same hardcoded field/option node IDs as the other workflows — see the note
 under "QA routing workflow".

@@ -16,7 +16,8 @@ name: Sub-issue status rollup
 # This assumes the repo also runs issue-status-sync, which sets Work status to
 # Done when an issue is closed as completed.
 #
-# Triggers: a human's Work status change (field_added) or close on a child, the
+# Triggers: a human's Work status change (field_added), close or reopen on a
+# child (a reopened not-planned child counts again, with no field write), the
 # sub_issue_* / parent_issue_* re-parenting events, and a `work-status-changed`
 # repository_dispatch that issue-status-sync / pr-linked-status / qa-routing send
 # after their own Work status writes — those are made with GITHUB_TOKEN, so they
