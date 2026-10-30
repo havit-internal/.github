@@ -312,12 +312,14 @@ The rollup rule (child → parent only, never parent → child):
 | No sub-issues | left alone — behaves as a normal issue under the other workflows |
 | All still Backlog/unset | left alone |
 | Any started (In progress / Ready for QA / Done), not all Done | **In progress** |
-| **All** children Done (or closed as completed) | **Done** |
+| **All** children Done | **Done**, and the parent is closed as completed |
 
-When it sets a parent to **Done**, it only sets the Work status field —
-`issue-status-sync.yml` (if that wrapper is also installed) then closes the
-parent as completed. So the two together mean: the last child reaching Done
-closes the Story, and the last Story reaching Done closes the Feature.
+**"Done" means the child's Work status is Done** — not merely closed. A task
+closed by a merged PR but still at **Ready for QA** (what `qa-routing` sets on
+merge) counts as *started*, not done, so merging the last task can't mark a
+Story done before QA has signed off. This does assume the repo also runs
+`issue-status-sync`, which is what sets Work status to Done when an issue is
+closed as completed.
 
 Key behaviours:
 
@@ -326,6 +328,13 @@ Key behaviours:
   not just a `#123` mention in the description. The manual-mention convention
   in "Feature → Story → Task hierarchy" above is fine for navigation but is
   invisible to this workflow.
+- **Self-contained — it closes the parent and climbs the tree itself.** A field
+  written with the default `GITHUB_TOKEN` does **not** trigger further workflow
+  runs, so rollup can't lean on `issue-status-sync` to close a parent it marks
+  Done, nor on a re-fired rollup to climb Story → Feature. It therefore closes a
+  Done parent itself and walks the ancestor chain **within the same run** (a
+  `visited` set stops it looping). So the last child reaching Done closes the
+  Story *and* rolls that up into the Feature in one go.
 - **Forward-only.** It only ever advances a parent toward Done, matching
   `pr-linked-status.yml`'s "never walk backward" stance. A child reopening
   under an already-closed parent does **not** reopen the parent — that's left
@@ -336,10 +345,10 @@ Key behaviours:
 - **"Not planned" children are excluded.** A child closed as won't-fix or
   duplicate is dropped from the rollup, so it can neither block the parent
   from reaching Done nor count as progress.
-- **Chains up on its own.** Setting a Story's status is itself a `field_added`
-  event on the Story, which re-fires the workflow and rolls the Story into its
-  Feature. The settle-guard (write only when the value actually changes) stops
-  the chain, so it can't loop.
+- **Same-repo only.** Sub-issues can cross repositories, but — like
+  `qa-routing` / `pr-linked-status` — a parent or child in another repo is
+  skipped: its events fire in that repo, and a run here can only read and write
+  issues in its own.
 
 What drives it: the wrapper triggers on a child's `closed` and `field_added`
 (a Work status change) — the status/close events that actually move the
@@ -347,6 +356,15 @@ rollup — plus the `sub_issue_*` / `parent_issue_*` events, which catch a child
 being re-parented without any status change. The **Work status field IDs** are
 the same hardcoded field/option node IDs as the other workflows — see the note
 under "QA routing workflow".
+
+**Concurrency caveat:** two status changes on *different children of the same
+parent* can run concurrently and race on the parent's status — one run computes
+Done while another computes In progress, and the forward-only guard only sees
+its own snapshot, so the later writer can still move the parent back within that
+narrow window. Each run recomputes from the parent's live children, so the next
+event on that parent self-corrects; a hard guarantee would need a per-parent
+lock that GitHub Actions can't express. Low-volume issue traffic makes this
+rare, but it's a known limitation rather than a solved problem.
 
 **Rollout — pilot first.** Like the other reusable workflows, this does
 nothing until a consuming repo adds the wrapper. Add it to **one** repo first
