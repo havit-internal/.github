@@ -332,8 +332,8 @@ Key behaviours:
   written with the default `GITHUB_TOKEN` does **not** trigger further workflow
   runs, so rollup can't lean on `issue-status-sync` to close a parent it marks
   Done, nor on a re-fired rollup to climb Story → Feature. It therefore closes a
-  Done parent itself and walks the ancestor chain **within the same run** (a
-  `visited` set stops it looping). So the last child reaching Done closes the
+  Done parent itself and walks the ancestor chain **within the same run** (each
+  climb keeps its own `visited` set to stop it looping). So the last child reaching Done closes the
   Story *and* rolls that up into the Feature in one go.
 - **Forward-only.** It only ever advances a parent toward Done, matching
   `pr-linked-status.yml`'s "never walk backward" stance. A child reopening
@@ -342,8 +342,8 @@ Key behaviours:
   This is the deliberate cost of having no Story-level QA step; if it ever
   bites, a `Ready for QA` intermediate for parents can be added without a
   redesign.
-- **"Not planned" children are excluded.** A child closed as won't-fix or
-  duplicate is dropped from the rollup, so it can neither block the parent
+- **"Not planned" children are excluded.** A child closed as *not planned* or
+  *duplicate* (whatever its Work status) is dropped from the rollup, so it can neither block the parent
   from reaching Done nor count as progress.
 - **Same-repo only.** Sub-issues can cross repositories, but — like
   `qa-routing` / `pr-linked-status` — a parent or child in another repo is
@@ -357,6 +357,21 @@ being re-parented without any status change. The **Work status field IDs** are
 the same hardcoded field/option node IDs as the other workflows — see the note
 under "QA routing workflow".
 
+**Status set by the other workflows reaches the rollup via a dispatch.**
+`issue-status-sync`, `pr-linked-status` and `qa-routing` write Work status with
+`GITHUB_TOKEN`, so their writes fire no `field_added` — a PR opening (In
+progress), a merge (Ready for QA / skip-qa Done) or a close (Done) would
+otherwise never reach the parent. After each such write they send a
+`work-status-changed` `repository_dispatch` listing the issues, which
+`GITHUB_TOKEN` *can* raise, and the rollup wrapper listens for it. Because it
+fires after the write, it also closes the race where a manual close reaches the
+rollup before `issue-status-sync` has set the child to Done. Sending it needs
+**`contents: write`** in those three wrappers (the templates now grant it). A
+repo that keeps `contents: read` still works — the dispatch is skipped with an
+info line — it just doesn't get automated status rolled up. The reusable
+workflows deliberately declare no `permissions:` of their own, so they inherit
+whatever the wrapper grants and an older wrapper keeps starting.
+
 **Concurrency caveat:** two status changes on *different children of the same
 parent* can run concurrently and race on the parent's status — one run computes
 Done while another computes In progress, and the forward-only guard only sees
@@ -368,11 +383,12 @@ rare, but it's a known limitation rather than a solved problem.
 
 **Rollout — pilot first.** Like the other reusable workflows, this does
 nothing until a consuming repo adds the wrapper. Add it to **one** repo first
-(Actions → New workflow → *Sub-issue status rollup* → Configure), exercise the
-hierarchy there — start a child → the Story goes In progress; finish all
-children → the Story goes Done and closes; same again up to the Feature — and
-only then add it to the other repos. Nothing in this repo changes to onboard
-another repo; it's wrapper-only, per repo.
+(Actions → New workflow → *Sub-issue status rollup* → Configure), switch that
+repo's `issue-status-sync` / `pr-linked-status` / `qa-routing` wrappers to
+`contents: write`, and exercise the hierarchy there — start a child → the Story
+goes In progress; finish all children → the Story goes Done and closes; same
+again up to the Feature — and only then add it to the other repos. Nothing in
+this repo changes to onboard another repo; it's wrapper-only, per repo.
 
 ## Project template: kanban on Work status, not project Status
 

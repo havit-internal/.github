@@ -10,6 +10,8 @@ name: Issue status sync
 # Each direction checks the other side's current state first, so a change
 # made by one direction doesn't bounce back and forth — it settles after at
 # most one extra (no-op) hop.
+# Every Work status write also sends a `work-status-changed` repository_dispatch
+# so subissue-rollup can roll it up to the parent (see notifyRollup).
 
 on:
   workflow_call:
@@ -22,9 +24,12 @@ on:
         type: string
         default: '["ubuntu-latest"]'
 
-permissions:
-  issues: write
-  contents: read
+# No top-level `permissions:` on purpose — the job inherits exactly what the
+# caller's wrapper grants. Declaring `contents: write` here would make the run
+# fail to start in any repo whose wrapper still grants `contents: read`, and
+# declaring `contents: read` would cap the token below what notifyRollup's
+# repository_dispatch needs. The wrapper template grants issues: write and
+# contents: write.
 
 jobs:
   sync:
@@ -69,6 +74,33 @@ jobs:
                   optionId,
                 }
               );
+              await notifyRollup([context.payload.issue.number]);
+            }
+
+            // Wake subissue-rollup for the issues whose Work status this run
+            // wrote. A field write made with GITHUB_TOKEN fires no field_added,
+            // so without this the parent never hears about it; a
+            // repository_dispatch is one of the few GITHUB_TOKEN events that
+            // DOES start runs. Needs `contents: write` in the wrapper — a repo
+            // that keeps `contents: read` (because it doesn't run the rollup)
+            // just gets a 403 here, which is logged and ignored.
+            async function notifyRollup(issueNumbers) {
+              if (issueNumbers.length === 0) return;
+              try {
+                await github.rest.repos.createDispatchEvent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  event_type: 'work-status-changed',
+                  client_payload: { issues: issueNumbers },
+                });
+                core.info(`Sent work-status-changed for ${issueNumbers.map(n => `#${n}`).join(', ')}.`);
+              } catch (err) {
+                if (err.status === 403) {
+                  core.info('No contents: write — not notifying subissue-rollup (only needed if this repo runs it).');
+                } else {
+                  core.warning(`Could not notify subissue-rollup: ${err.message}`);
+                }
+              }
             }
 
             // The merged PR in this same repo that closed this issue, or null if

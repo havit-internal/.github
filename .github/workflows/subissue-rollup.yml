@@ -16,11 +16,21 @@ name: Sub-issue status rollup
 # This assumes the repo also runs issue-status-sync, which sets Work status to
 # Done when an issue is closed as completed.
 #
+# Triggers: a human's Work status change (field_added) or close on a child, the
+# sub_issue_* / parent_issue_* re-parenting events, and a `work-status-changed`
+# repository_dispatch that issue-status-sync / pr-linked-status / qa-routing send
+# after their own Work status writes — those are made with GITHUB_TOKEN, so they
+# fire no field_added, and the dispatch (which GITHUB_TOKEN CAN raise) is how the
+# rollup hears about them. It runs after the writer has written, so it also
+# closes the race where a manual close reaches the rollup before
+# issue-status-sync has set the child to Done.
+#
 # Self-contained, by necessity: a field written with the default GITHUB_TOKEN
 # does NOT trigger further workflow runs, so this can't lean on issue-status-sync
 # to close a parent it marks Done, nor on a re-fired rollup to climb from Story
 # to Feature. It therefore closes a Done parent itself and walks up the ancestor
-# chain within the same run. A `visited` set stops it from looping.
+# chain within the same run. Each climb keeps its own `visited` set to stop it
+# looping, so a later climb still recomputes an ancestor an earlier one saw.
 #
 # Forward-only: it only ever advances a parent toward Done. It never walks a
 # parent back off In progress / Ready for QA / Done (same "no backward" stance
@@ -84,6 +94,8 @@ jobs:
             // moves it to In progress when it is NOT yet one of these, so it never
             // walks a parent backward.
             const ADVANCED = [IN_PROGRESS, 'Ready for QA', DONE];
+            // Close reasons that drop a child from the rollup (IssueStateReason).
+            const EXCLUDED_REASONS = ['NOT_PLANNED', 'DUPLICATE'];
 
             const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
 
@@ -147,6 +159,8 @@ jobs:
                       subIssues(first: 100) {
                         nodes {
                           number
+                          state
+                          stateReason
                           repository { nameWithOwner }
                           ${FIELD_FRAGMENT}
                         }
@@ -170,9 +184,12 @@ jobs:
               // A child is "done" only when its Work status is Done — a task that
               // merged but still awaits QA is "Ready for QA" (started, not done),
               // so a merge can't complete the parent before QA. Cross-repo
-              // children are skipped entirely (we can't track their events here).
+              // children are skipped entirely (we can't track their events here),
+              // and so are children closed as not planned / duplicate — a
+              // won't-fix slice must neither block the parent nor count as progress.
               const considered = parent.subIssues.nodes
                 .filter(c => c.repository.nameWithOwner === sameRepo)
+                .filter(c => !(c.state === 'CLOSED' && EXCLUDED_REASONS.includes(c.stateReason)))
                 .map(c => {
                   const ws = workStatusOf(c.issueFieldValues);
                   const done = ws === DONE;
@@ -181,7 +198,7 @@ jobs:
                 });
 
               if (considered.length === 0) {
-                core.info(`Parent #${parentNumber}: no same-repo sub-issues to roll up — leaving alone.`);
+                core.info(`Parent #${parentNumber}: no same-repo, still-planned sub-issues to roll up — leaving alone.`);
                 return false;
               }
 
@@ -248,22 +265,30 @@ jobs:
 
             // Climb the ancestor chain in-run: recompute a parent, and if it
             // changed, recompute its own parent too (events wouldn't do this for
-            // us). `visited` guards against cycles / repeated work.
-            const visited = new Set();
-            async function rollUp(parentNumber) {
+            // us). `visited` guards one climb against cycles. It's per climb,
+            // not shared across roots: roots can come in any order (Feature
+            // before Story), and a Story that changes later must still be able
+            // to recompute the Feature an earlier climb already saw.
+            async function rollUp(parentNumber, visited) {
               if (visited.has(parentNumber)) return;
               visited.add(parentNumber);
               const changed = await recompute(parentNumber);
               if (!changed) return;
               const meta = await getMeta(parentNumber);
-              if (meta.parentNumber) await rollUp(meta.parentNumber);
+              if (meta.parentNumber) await rollUp(meta.parentNumber, visited);
             }
 
             // Collect the issue numbers the event names, keeping only ones in THIS
             // repo — payload.issue is always local; payload.sub_issue /
-            // parent_issue carry their own repository and may be cross-repo.
+            // parent_issue carry their own repository and may be cross-repo. A
+            // work-status-changed repository_dispatch lists its (always local)
+            // issues in client_payload.issues.
             const payload = context.payload;
             const named = new Set();
+            const dispatched = payload.client_payload?.issues;
+            for (const n of Array.isArray(dispatched) ? dispatched : []) {
+              if (Number.isInteger(n) && n > 0) named.add(n);
+            }
             for (const key of ['issue', 'sub_issue', 'parent_issue']) {
               const obj = payload[key];
               if (!obj || typeof obj.number !== 'number') continue;
@@ -301,7 +326,7 @@ jobs:
 
             for (const parentNumber of roots) {
               try {
-                await rollUp(parentNumber);
+                await rollUp(parentNumber, new Set());
               } catch (err) {
                 core.warning(`Could not roll up parent #${parentNumber}: ${err.message}`);
               }

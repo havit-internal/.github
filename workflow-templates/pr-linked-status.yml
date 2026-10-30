@@ -15,7 +15,8 @@ jobs:
     permissions:
       issues: write
       pull-requests: read
-      contents: read
+      contents: write   # only to wake subissue-rollup (repository_dispatch);
+                        # read is enough if this repo doesn't run the rollup
     uses: havit-internal/.github/.github/workflows/pr-linked-status.yml@main
     with:
       runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels.
