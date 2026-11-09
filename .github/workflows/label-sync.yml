@@ -28,7 +28,12 @@ permissions:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    # Not a reusable workflow: consuming repos never run this job, it executes
+    # only here in havit-internal/.github. A run takes about a minute, so the
+    # cheapest GitHub-hosted runner is enough. It also needs yq and a checkout,
+    # which is why it does not follow the self-hosted/hosted switch of the
+    # reusable workflows.
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

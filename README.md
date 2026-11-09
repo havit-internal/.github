@@ -204,12 +204,13 @@ all repositories). Any other value, or no variable at all, means self-hosted.
 The switch applies to new runs only: jobs already queued for a self-hosted
 runner stay queued, so cancel and re-run them. Nothing changes in the
 consuming repos — the wrappers pass no inputs. `label-sync` is not affected;
-it always runs on `ubuntu-latest` (it needs `yq` and a checkout).
+it always runs on GitHub-hosted `ubuntu-slim` (it runs only in this repo, takes
+about a minute, and needs `yq` and a checkout).
 
 **Self-hosted runners need Actions Runner v2.327.1 or newer.** These workflows
 run `actions/github-script` v9 (and `label-sync` runs `actions/checkout` v7),
 which refuse to start on an older runner — the job fails before any script of
-ours executes. Hosted runners like `ubuntu-latest` are always new enough, so
+ours executes. Hosted runners like `ubuntu-slim` are always new enough, so
 this only matters for the self-hosted runners.
 
 What it does on merge:
