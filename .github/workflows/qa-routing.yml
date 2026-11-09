@@ -11,15 +11,7 @@ name: QA routing
 # change up to their parent (see notifyRollup).
 
 on:
-  workflow_call:
-    inputs:
-      runner:
-        # Self-hosted runners must be on Actions Runner v2.327.1 or newer —
-        # actions/github-script v8+ (and actions/checkout v5+) refuse to start
-        # on anything older. Hosted runners are always new enough.
-        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]. Self-hosted runners need Actions Runner v2.327.1+.'
-        type: string
-        default: '["ubuntu-latest"]'
+  workflow_call: {}
 
 # No top-level `permissions:` on purpose — the job inherits exactly what the
 # caller's wrapper grants. Declaring `contents: write` here would make the run
@@ -30,7 +22,12 @@ on:
 
 jobs:
   route-to-qa:
-    runs-on: ${{ fromJSON(inputs.runner) }}
+    # Self-hosted Windows runners by default. Set the org variable
+    # ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER to 1 to run on GitHub-hosted ubuntu-slim
+    # instead (e.g. while the self-hosted runners are down); any other value or
+    # no variable at all means self-hosted. Self-hosted runners need Actions
+    # Runner v2.327.1+ (actions/github-script v9 refuses to start on older).
+    runs-on: ${{ fromJSON(vars.ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER == '1' && '["ubuntu-slim"]' || '["self-hosted","windows","qa-routing"]') }}
     steps:
       - name: Set QA field and assign linked issues
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0

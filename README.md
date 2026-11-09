@@ -65,8 +65,8 @@ reusable workflow can't be mistyped.
 `workflow-templates/*.yml` is the single source for the wrapper YAML — the
 sections below describe what each workflow does and link there instead of
 repeating it. Without the UI, copy the file into the consuming repo's
-`.github/workflows/` under the same name. There are no inputs; every job runs
-on `ubuntu-latest`.
+`.github/workflows/` under the same name. The wrappers take no inputs. Where
+the jobs run is decided org-wide by one variable — see "Which runner" below.
 
 ## Issue template inheritance — the gotcha
 
@@ -192,12 +192,25 @@ each consuming repo needs a thin wrapper that triggers it on merge:
 [`workflow-templates/qa-routing.yml`](workflow-templates/qa-routing.yml). Add it through the UI:
 Actions → New workflow → By havit-internal → Configure.
 
+### Which runner
+
+The four reusable workflows (qa-routing, issue-status-sync, pr-linked-status,
+subissue-rollup) run on our self-hosted Windows runners by default — labels
+`self-hosted`, `windows`, `qa-routing`. To move them to GitHub-hosted
+`ubuntu-slim` (e.g. while the self-hosted runners are down), set the
+organization variable `ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER` to `1`
+(Organization settings → Secrets and variables → Actions → Variables, scoped to
+all repositories). Any other value, or no variable at all, means self-hosted.
+The switch applies to new runs only: jobs already queued for a self-hosted
+runner stay queued, so cancel and re-run them. Nothing changes in the
+consuming repos — the wrappers pass no inputs. `label-sync` is not affected;
+it always runs on `ubuntu-latest` (it needs `yq` and a checkout).
+
 **Self-hosted runners need Actions Runner v2.327.1 or newer.** These workflows
 run `actions/github-script` v9 (and `label-sync` runs `actions/checkout` v7),
 which refuse to start on an older runner — the job fails before any script of
 ours executes. Hosted runners like `ubuntu-latest` are always new enough, so
-this only matters if you pass self-hosted labels. The same floor applies to
-all three reusable workflows below.
+this only matters for the self-hosted runners.
 
 What it does on merge:
 1. Reads the PR's `closingIssuesReferences` (GraphQL) — the same resolved
