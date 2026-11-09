@@ -18,6 +18,3 @@ jobs:
       contents: write   # only to wake subissue-rollup (repository_dispatch);
                         # read is enough if this repo doesn't run the rollup
     uses: havit-internal/.github/.github/workflows/pr-linked-status.yml@main
-    with:
-      runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels.
-                                    # Self-hosted needs Actions Runner v2.327.1+

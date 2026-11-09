@@ -65,9 +65,8 @@ reusable workflow can't be mistyped.
 `workflow-templates/*.yml` is the single source for the wrapper YAML — the
 sections below describe what each workflow does and link there instead of
 repeating it. Without the UI, copy the file into the consuming repo's
-`.github/workflows/` under the same name. The only knob is the optional
-`runner` input: a JSON array of runner labels, default `'["ubuntu-latest"]'`,
-e.g. `'["self-hosted","on-prem"]'`.
+`.github/workflows/` under the same name. There are no inputs; every job runs
+on `ubuntu-latest`.
 
 ## Issue template inheritance — the gotcha
 

@@ -24,6 +24,3 @@ jobs:
       issues: write
       contents: read
     uses: havit-internal/.github/.github/workflows/subissue-rollup.yml@main
-    with:
-      runner: '["ubuntu-latest"]'   # optional — JSON array of runner labels.
-                                    # Self-hosted needs Actions Runner v2.327.1+
