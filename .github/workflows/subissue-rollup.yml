@@ -1,4 +1,4 @@
-name: Sub-issue status rollup
+name: "[Template] Sub-issue status rollup"
 
 # Reusable workflow — called from a thin wrapper in each consuming repo.
 # Rolls a parent issue's org-wide "Work status" field UP from the status of

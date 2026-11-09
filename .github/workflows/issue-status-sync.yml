@@ -1,4 +1,4 @@
-name: Issue status sync
+name: "[Template] Issue status sync"
 
 # Reusable workflow — called from a thin wrapper in each consuming repo.
 # Keeps the org-wide "Work status" issue field in sync with the issue's

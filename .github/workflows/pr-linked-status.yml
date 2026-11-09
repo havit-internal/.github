@@ -1,4 +1,4 @@
-name: PR-linked issue status
+name: "[Template] PR-linked issue status"
 
 # Reusable workflow — called from a thin wrapper in each consuming repo.
 # When a PR is linked to an issue (via a Closes/Fixes/Resolves #N keyword or

@@ -1,4 +1,4 @@
-name: QA routing
+name: "[Template] QA routing"
 
 # Reusable workflow — called from a thin wrapper in each consuming repo.
 # Reads the merged PR's "closing issues" — the same set GitHub computes for
