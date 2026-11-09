@@ -54,15 +54,7 @@ name: Sub-issue status rollup
 # sub-issue UI / API), not a "#123" mention in the description.
 
 on:
-  workflow_call:
-    inputs:
-      runner:
-        # Self-hosted runners must be on Actions Runner v2.327.1 or newer —
-        # actions/github-script v8+ refuses to start on anything older. Hosted
-        # runners are always new enough.
-        description: 'JSON array of runner labels, e.g. ["ubuntu-latest"] or ["self-hosted","qa-routing"]. Self-hosted runners need Actions Runner v2.327.1+.'
-        type: string
-        default: '["ubuntu-latest"]'
+  workflow_call: {}
 
 permissions:
   issues: write
@@ -70,7 +62,12 @@ permissions:
 
 jobs:
   rollup:
-    runs-on: ${{ fromJSON(inputs.runner) }}
+    # Self-hosted Windows runners by default. Set the org variable
+    # ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER to 1 to run on GitHub-hosted ubuntu-slim
+    # instead (e.g. while the self-hosted runners are down); any other value or
+    # no variable at all means self-hosted. Self-hosted runners need Actions
+    # Runner v2.327.1+ (actions/github-script v9 refuses to start on older).
+    runs-on: ${{ fromJSON(vars.ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER == '1' && '["ubuntu-slim"]' || '["self-hosted","windows","qa-routing"]') }}
     steps:
       - name: Roll sub-issue statuses up to the parent
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
