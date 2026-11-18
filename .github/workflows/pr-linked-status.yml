@@ -64,6 +64,37 @@ jobs:
               }
             }
 
+            // GitHub resolves Closes/Fixes/Resolves keywords into
+            // closingIssuesReferences only when the PR targets the repo's default
+            // branch. For a PR into any other branch (release/uat,
+            // release/production, ...) that list holds just the issues linked by
+            // hand in the Development panel, so the body keywords are read here
+            // too. Same syntax as the default branch: keyword, optional colon,
+            // then #N, owner/repo#N or an issue URL — several may follow one
+            // keyword, separated by commas or "and". HTML comments (the PR
+            // template's hints) are ignored. Kept in sync with qa-routing.yml.
+            function bodyClosingRefs(pullRequest, defaultBranch, sameRepo) {
+              if (pullRequest.base.ref === defaultBranch) return [];
+              const body = (pullRequest.body ?? '').replace(/<!--[\s\S]*?-->/g, '');
+              const ref = String.raw`(?:https://github\.com/[\w.-]+/[\w.-]+/issues/\d+|(?:[\w.-]+/[\w.-]+)?#\d+)`;
+              const keywordList = new RegExp(
+                String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b\s*:?\s*(${ref}(?:\s*(?:,|\band\b)\s*${ref})*)`,
+                'gi'
+              );
+              const item = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)|(?:([\w.-]+\/[\w.-]+))?#(\d+)/g;
+              const refs = [];
+              for (const list of body.matchAll(keywordList)) {
+                for (const m of list[1].matchAll(item)) {
+                  const repo = m[1] ?? m[3] ?? sameRepo;
+                  refs.push({
+                    number: Number(m[2] ?? m[4]),
+                    repository: { nameWithOwner: repo.toLowerCase() === sameRepo.toLowerCase() ? sameRepo : repo },
+                  });
+                }
+              }
+              return refs;
+            }
+
             // Same closingIssuesReferences lookup as qa-routing.yml — the set of
             // issues this PR is linked to, whether via body keyword or the
             // Development panel UI.
@@ -92,8 +123,11 @@ jobs:
             if (closingIssues.pageInfo.hasNextPage) {
               core.warning('This PR has more than 50 closing issue references; only the first 50 are checked.');
             }
-            const refs = closingIssues.nodes;
             const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
+            const refs = [
+              ...closingIssues.nodes,
+              ...bodyClosingRefs(context.payload.pull_request, context.payload.repository.default_branch, sameRepo),
+            ];
             const crossRepo = refs.filter(r => r.repository.nameWithOwner !== sameRepo);
             if (crossRepo.length > 0) {
               core.warning(`Skipping closing reference(s) in other repos (not supported by this workflow): ${crossRepo.map(r => `${r.repository.nameWithOwner}#${r.number}`).join(', ')}`);

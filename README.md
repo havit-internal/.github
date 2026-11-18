@@ -176,7 +176,18 @@ You don't have to type a keyword at all — linking an issue via the PR's
 **Development** panel (the "Link a pull request"/"Link an issue" UI) works
 identically. The workflow reads GitHub's own resolved `closingIssuesReferences`
 for the PR, the same data that panel displays, so a manually linked issue is
-picked up exactly like a `Fixes #N` in the text — no body parsing involved.
+picked up exactly like a `Fixes #N` in the text.
+
+**PRs into a non-default branch** (`release/uat`, `release/production`, …):
+GitHub resolves the keywords into `closingIssuesReferences` only for a PR
+that targets the repo's default branch; for any other base it ignores them
+and the list holds just the issues linked in the Development panel. So for
+such a PR, `qa-routing` and `pr-linked-status` also read the keywords from
+the PR body themselves (same syntax, HTML comments ignored) and merge them
+with `closingIssuesReferences`. `Closes #N` in the body is therefore enough
+on a release branch too — no manual Development-panel link needed. What
+doesn't happen there is GitHub's own link: the issue doesn't show the PR in
+its Development panel.
 
 - `Closes #N` / `Fixes #N` / `Resolves #N` in the body, **or** a manual link
   in the Development panel — This PR fixes issue N. On merge, set to
@@ -216,8 +227,9 @@ this only matters for the self-hosted runners.
 What it does on merge:
 1. Reads the PR's `closingIssuesReferences` (GraphQL) — the same resolved
    list GitHub shows in the PR's Development panel, covering both
-   `Closes`/`Fixes`/`Resolves #N` text and manually linked issues. No
-   matches → no-op.
+   `Closes`/`Fixes`/`Resolves #N` text and manually linked issues. For a PR
+   merged into a non-default branch it adds the keywords parsed from the PR
+   body (see the PR convention above). No matches → no-op.
 2. For each linked issue, sets the org-wide **Work status** issue field
    (single select) to **Ready for QA** via the `setIssueFieldValue` GraphQL
    mutation — a single-select field only ever holds one value, so this
@@ -296,7 +308,8 @@ the other — it settles after at most one harmless extra run.
 `.github/workflows/pr-linked-status.yml` is a reusable workflow that moves
 an issue's **Work status** to **In progress** as soon as a PR is linked to
 it — same `closingIssuesReferences` detection as `qa-routing.yml` (body
-keyword or Development panel link, either way). Wrapper:
+keyword or Development panel link, either way; body keywords parsed by the
+workflow itself on a non-default base). Wrapper:
 [`workflow-templates/pr-linked-status.yml`](workflow-templates/pr-linked-status.yml). Add it through the UI:
 Actions → New workflow → By havit-internal → Configure.
 
