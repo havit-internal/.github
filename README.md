@@ -227,7 +227,10 @@ What it does on merge:
    issue the merge closed anyway (the repo still has auto-close on) gets
    reopened by this — a closed issue can't be In review — and the run logs a
    warning naming the setting to turn off. An issue closed as *not planned*
-   or *duplicate* is left closed. **Exception:** an issue labeled `skip-qa`
+   or *duplicate* is left closed, and so is one that was already closed as
+   completed by anything other than this merge (QA's Done, a person, an
+   earlier PR) — re-running the workflow or merging a follow-up PR can't
+   reopen finished work. **Exception:** an issue labeled `skip-qa`
    goes to **Done** instead, which closes it — see below.
 4. Leaves a comment on the issue linking back to the merged PR.
 
@@ -321,7 +324,12 @@ The rollup rule (child → parent only, never parent → child):
 **"Done" means the child's status is Done.** A task whose PR has merged waits
 in **In review** until QA moves it to Done (auto-close is off, so the merge
 doesn't close it), so it counts as *started*, not done, and merging the last
-task can't mark a Story done before QA has signed off.
+task can't mark a Story done before QA has signed off. The same holds in a
+repo that still has auto-close on: a child closed by a pull request counts as
+started (unless it's labeled `skip-qa`), because the merge closed it, not QA —
+`qa-routing` reopens it to In review, and the rollup moves on once QA sets
+Done. A repo with auto-close on and no `qa-routing` would therefore never see
+its parents complete on their own — another reason auto-close must be off.
 
 Key behaviours:
 

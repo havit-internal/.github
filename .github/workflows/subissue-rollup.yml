@@ -13,7 +13,9 @@ name: "[Template] Sub-issue status rollup"
 # "Done" means the child's status is Done. A task whose PR has merged waits in
 # "In review" until QA moves it to Done (our repos have GitHub's auto-close of
 # linked issues on merge turned off), so it counts as started, not done, and
-# the last merge can't mark a Story done before QA.
+# the last merge can't mark a Story done before QA. In a repo that still has
+# auto-close on, a child closed by a pull request (not labeled skip-qa) also
+# counts as started: the merge closed it, not QA, and qa-routing reopens it.
 #
 # Statuses are read by category (backlog / planned / started / completed /
 # not_planned / duplicate), not by display name. An issue created before
@@ -113,6 +115,19 @@ jobs:
             const EXCLUDED = ['not_planned', 'duplicate'];
             const STARTED_OR_DONE = ['started', 'completed'];
 
+            // A child closed as completed BY A PULL REQUEST was closed by a merge
+            // (the repo still has auto-close of linked issues on), not by QA —
+            // qa-routing is about to reopen it to In review. Count it as started,
+            // so the merge can't complete the parent before QA. skip-qa children
+            // are the exception: for them the merge IS completion.
+            function childCategoryOf(child) {
+              const cat = categoryOf(child);
+              if (cat !== 'completed') return cat;
+              const closer = child.timelineItems?.nodes?.[0]?.closer;
+              const skipQa = (child.labels?.nodes ?? []).some(l => l.name === 'skip-qa');
+              return closer?.__typename === 'PullRequest' && !skipQa ? 'started' : cat;
+            }
+
             const STATUS_FRAGMENT = `
               state
               stateReason
@@ -156,6 +171,10 @@ jobs:
                           number
                           repository { nameWithOwner }
                           ${STATUS_FRAGMENT}
+                          labels(first: 20) { nodes { name } }
+                          timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
+                            nodes { ... on ClosedEvent { closer { __typename } } }
+                          }
                         }
                         pageInfo { hasNextPage }
                       }
@@ -186,7 +205,7 @@ jobs:
               // count as progress.
               const considered = parent.subIssues.nodes
                 .filter(c => c.repository.nameWithOwner === sameRepo)
-                .map(categoryOf)
+                .map(childCategoryOf)
                 .filter(cat => !EXCLUDED.includes(cat));
 
               if (considered.length === 0) {

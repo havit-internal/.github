@@ -124,6 +124,33 @@ jobs:
             // a status would reopen it.
             const LEAVE_CLOSED_REASONS = ['not_planned', 'duplicate'];
 
+            const pr = context.payload.pull_request.number;
+
+            // Did THIS merge close the issue? Only then is a closed issue ours to
+            // reopen for QA (the repo still has auto-close on). One closed by
+            // anything else — QA setting Done, an earlier PR, a person — is left
+            // alone, so a re-run or a follow-up PR can't reopen finished work.
+            async function closedByThisPr(issue_number) {
+              const { repository } = await github.graphql(
+                `query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    issue(number: $number) {
+                      timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
+                        nodes {
+                          ... on ClosedEvent {
+                            closer { ... on PullRequest { number repository { nameWithOwner } } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }`,
+                { owner: context.repo.owner, repo: context.repo.repo, number: issue_number }
+              );
+              const closer = repository.issue.timelineItems.nodes[0]?.closer;
+              return closer?.number === pr && closer.repository?.nameWithOwner === sameRepo;
+            }
+
             async function setStatus(nodeId, name) {
               await github.graphql(
                 `mutation($issueId: ID!, $statusId: ID!) {
@@ -162,7 +189,6 @@ jobs:
               }
             }
 
-            const pr = context.payload.pull_request.number;
             const changed = [];
             for (const issue_number of issueNumbers) {
               try {
@@ -173,9 +199,17 @@ jobs:
                 });
                 const current = issue.status?.name ?? null;
 
-                if (issue.state === 'closed' && LEAVE_CLOSED_REASONS.includes(issue.state_reason)) {
-                  core.info(`Issue #${issue_number} is closed as ${issue.state_reason} — leaving it closed.`);
-                  continue;
+                let closedByMerge = false;
+                if (issue.state === 'closed') {
+                  if (LEAVE_CLOSED_REASONS.includes(issue.state_reason)) {
+                    core.info(`Issue #${issue_number} is closed as ${issue.state_reason} — leaving it closed.`);
+                    continue;
+                  }
+                  if (!(await closedByThisPr(issue_number))) {
+                    core.info(`Issue #${issue_number} was already closed as completed, not by this merge — leaving it alone.`);
+                    continue;
+                  }
+                  closedByMerge = true;
                 }
 
                 const skipQa = issue.labels.some(
@@ -209,11 +243,11 @@ jobs:
                 }
 
                 if (current !== IN_REVIEW) {
-                  // Setting an open status on a closed issue reopens it. That
-                  // happens when the repo still has GitHub's auto-close of linked
-                  // issues on merge turned on: the merge closed the issue as Done
-                  // before QA saw it.
-                  if (issue.state === 'closed') {
+                  // Setting an open status on a closed issue reopens it — only
+                  // reached when this merge closed it (the repo still has GitHub's
+                  // auto-close of linked issues on merge turned on), so it gets
+                  // its QA pass after all.
+                  if (closedByMerge) {
                     core.warning(`Issue #${issue_number} was closed by the merge — reopening it for QA. Turn off "Auto-close issues with merged linked pull requests" in this repo's Settings → General → Issues.`);
                   }
                   await setStatus(issue.node_id, IN_REVIEW);

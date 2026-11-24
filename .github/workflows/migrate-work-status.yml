@@ -139,18 +139,52 @@ jobs:
                     continue;
                   }
 
-                  const current = issue.status?.name ?? null;
-                  if (current === target) {
+                  // 'same' / 'ahead' / 'set' for a given native status.
+                  const decide = current =>
+                    current === target ? 'same'
+                    : current && ORDER.indexOf(current) > ORDER.indexOf(target) ? 'ahead'
+                    : 'set';
+
+                  let current = issue.status?.name ?? null;
+                  let verdict = decide(current);
+
+                  // The page above can be minutes old by the time a real run gets
+                  // here (one write per second), so re-read the issue right before
+                  // writing: skip it if it has been closed meanwhile (an open
+                  // status would reopen it) and redo the "never backward" check
+                  // against its live status.
+                  if (!dryRun && verdict === 'set') {
+                    try {
+                      const { node: live } = await github.graphql(
+                        `query($id: ID!) { node(id: $id) { ... on Issue { state status { name } } } }`,
+                        { id: issue.id }
+                      );
+                      if (live.state !== 'OPEN') {
+                        core.info(`${ref}: closed since the page was read — skipped.`);
+                        continue;
+                      }
+                      current = live.status?.name ?? null;
+                      verdict = decide(current);
+                    } catch (err) {
+                      core.warning(`${ref}: could not re-read the issue — ${err.message}`);
+                      failed++;
+                      continue;
+                    }
+                  }
+
+                  if (verdict === 'same') {
                     unchanged++;
                     continue;
                   }
-                  if (current && ORDER.indexOf(current) > ORDER.indexOf(target)) {
+                  if (verdict === 'ahead') {
                     keptAhead.push([ref, current, ws]);
                     continue;
                   }
 
-                  changes.push([ref, current ?? '(no status)', target]);
-                  if (dryRun) continue;
+                  if (dryRun) {
+                    changes.push([ref, current ?? '(no status)', target]);
+                    continue;
+                  }
                   try {
                     await github.graphql(
                       `mutation($issueId: ID!, $statusId: ID!) {
@@ -160,6 +194,9 @@ jobs:
                       }`,
                       { issueId: issue.id, statusId: statusId[target] }
                     );
+                    // Recorded only once the write succeeded, so the summary never
+                    // reports a failed write as migrated.
+                    changes.push([ref, current ?? '(no status)', target]);
                     core.info(`${ref}: ${current ?? '(no status)'} → ${target}`);
                   } catch (err) {
                     core.warning(`${ref}: could not set ${target} — ${err.message}`);
