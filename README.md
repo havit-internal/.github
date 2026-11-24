@@ -18,18 +18,17 @@ health files, and a canonical label set with zero per-repo work.
 │   ├── task.yml             ← Implementation slice — a piece of a Story
 │   └── config.yml           ← Disables blank issues
 ├── pull_request_template.md ← Issues / Refs — see QA convention below
-├── labels.yml               ← Source of truth for sev:*/meta labels (work type is an Issue Type, not a label; workflow status is the Work status issue field, not a label)
+├── labels.yml               ← Source of truth for sev:*/meta labels (work type is an Issue Type, not a label; workflow status is GitHub's native issue status, not a label)
 └── workflows/
-    ├── qa-routing.yml        ← Reusable workflow — see "PR convention" below.
-    ├── issue-status-sync.yml ← Reusable workflow — issue closed ⟷ Work status Done, both directions; reopened → In progress
-    ├── pr-linked-status.yml  ← Reusable workflow — PR linked to issue → Work status In progress
-    ├── subissue-rollup.yml   ← Reusable workflow — child Task/Bug status rolls up to parent Story/Feature
-    └── label-sync.yml        ← Runs centrally — see "Label sync" below. CI still planned.
+    ├── qa-routing.yml          ← Reusable workflow — see "PR convention" below.
+    ├── subissue-rollup.yml     ← Reusable workflow — child Task/Bug status rolls up to parent Story/Feature
+    ├── label-sync.yml          ← Runs centrally — see "Label sync" below. CI still planned.
+    ├── migrate-work-status.yml ← Runs centrally, by hand, once — see "Migrating from Work status" below
+    ├── issue-status-sync.yml   ← Retired stub — native statuses replaced it; remove its wrappers
+    └── pr-linked-status.yml    ← Retired stub — native statuses replaced it; remove its wrappers
 
 workflow-templates/          ← Ready-made wrappers for the reusable workflows — see "Adding the wrappers to a repo"
 ├── qa-routing.yml            (+ .properties.json)
-├── issue-status-sync.yml     (+ .properties.json)
-├── pr-linked-status.yml      (+ .properties.json)
 └── subissue-rollup.yml       (+ .properties.json)
 
 plugins/
@@ -40,7 +39,7 @@ plugins/
 
 | Repo | Role |
 |------|------|
-| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `.github/labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml`, `issue-status-sync.yml`, `pr-linked-status.yml`, `subissue-rollup.yml`, and `label-sync.yml` built; CI still planned). |
+| `havit-internal/.github`                        | Fallback files: issue templates, PR template, `.github/labels.yml`. Reusable workflows also live here, under `.github/workflows/` (`qa-routing.yml`, `subissue-rollup.yml`, and `label-sync.yml` built; CI still planned). |
 | `havit-internal/002.HFW-NewProjectTemplate-Blazor` | GitHub template repo for new Blazor projects. Not org-wide — covers the Blazor stack specifically, not every repo type. |
 
 Templates from this repo are **inherited** by every repo in the org that does
@@ -58,8 +57,8 @@ until that's a real need, keeping everything in one repo is simpler.
 Each wrapper is published as an org **workflow template**
 (`workflow-templates/` at the root of this repo). In the consuming repo, go
 to **Actions → New workflow**, find the **By havit-internal** section, and
-click **Configure** on *QA routing*, *Issue status sync*, or *PR-linked issue
-status*, then commit. Nothing to copy by hand, and the `uses:` path to the
+click **Configure** on *QA routing* or *Sub-issue status rollup*, then
+commit. Nothing to copy by hand, and the `uses:` path to the
 reusable workflow can't be mistyped.
 
 `workflow-templates/*.yml` is the single source for the wrapper YAML — the
@@ -103,10 +102,9 @@ matching the `type:` key each issue template sets.
 
 The issue templates set their Issue Type via the top-level `type:` key in
 each `.github/ISSUE_TEMPLATE/*.yml` file (not the `labels:` key). `labels.yml`
-below is only for things Issue Types and the Work status field don't cover:
+below is only for things Issue Types and issue statuses don't cover:
 severity and triage/meta labels. Workflow status itself is **not** a label —
-it's the org-wide **Work status** issue field (see "QA routing workflow"
-below).
+it's GitHub's native **issue status** (see "Native issue statuses" below).
 
 No template presets `needs-triage` (or any other label), and that's
 deliberate — **don't add `labels:` back**. A label listed in a template is
@@ -162,15 +160,16 @@ keywords instead of inventing a separate one. Use `Closes #N`, `Fixes #N`,
 or `Resolves #N` — anywhere in the PR description, one or several
 comma-separated (`Fixes #10, #11`) — for every issue this PR fixes. Here
 the keyword only *links* the issue: our repos have GitHub's auto-close of
-linked issues on merge turned off, so the merge does **not** close it.
+linked issues on merge turned off, so the merge does **not** close it (see
+"Native issue statuses" below for the setting).
 
-On merge, `qa-routing` sets the org-wide **Work status** issue field to
-**Ready for QA** and assigns everyone in `.github/QAOWNERS`; the issue stays
-open. It gets closed only when it's actually done — when QA sets Work status
-to **Done**, `issue-status-sync` closes it (and closing it by hand as
-completed sets Done). If QA rejects the fix, set Work status back to
-**In progress**. The one exception is a `skip-qa` issue, which `qa-routing`
-sets to Done and closes itself — see below.
+Linking the PR already moves the issue's status — a draft PR to
+**In progress**, a PR ready for review to **In review**. On merge the issue
+stays **In review**, which is our "waiting for QA", and `qa-routing` assigns
+everyone in `.github/QAOWNERS`. It gets closed only when it's actually done —
+when QA sets the status to **Done**, which closes it. If QA rejects the fix,
+QA sets the status back to **In progress**. The one exception is a `skip-qa`
+issue, which `qa-routing` sets to Done (and so closes) itself — see below.
 
 You don't have to type a keyword at all — linking an issue via the PR's
 **Development** panel (the "Link a pull request"/"Link an issue" UI) works
@@ -179,8 +178,9 @@ for the PR, the same data that panel displays, so a manually linked issue is
 picked up exactly like a `Fixes #N` in the text — no body parsing involved.
 
 - `Closes #N` / `Fixes #N` / `Resolves #N` in the body, **or** a manual link
-  in the Development panel — This PR fixes issue N. On merge, set to
-  Ready for QA by `qa-routing`; stays open until QA moves it to Done.
+  in the Development panel — This PR fixes issue N. On merge, stays
+  In review and is assigned to QA by `qa-routing`; stays open until QA moves
+  it to Done.
 - `Refs #N` — Related issue, no action. Cross-link only, not routed to QA
   (plain text mentions never appear in `closingIssuesReferences` unless
   linked one of the two ways above).
@@ -194,8 +194,8 @@ Actions → New workflow → By havit-internal → Configure.
 
 ### Which runner
 
-The four reusable workflows (qa-routing, issue-status-sync, pr-linked-status,
-subissue-rollup) run on our self-hosted Windows runners by default — labels
+The reusable workflows (qa-routing, subissue-rollup) run on our self-hosted
+Windows runners by default — labels
 `self-hosted`, `windows`, `qa-routing`. To move them to GitHub-hosted
 `ubuntu-slim` (e.g. while the self-hosted runners are down), set the
 organization variable `ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER` to `1`
@@ -218,22 +218,24 @@ What it does on merge:
    list GitHub shows in the PR's Development panel, covering both
    `Closes`/`Fixes`/`Resolves #N` text and manually linked issues. No
    matches → no-op.
-2. For each linked issue, sets the org-wide **Work status** issue field
-   (single select) to **Ready for QA** via the `setIssueFieldValue` GraphQL
-   mutation — a single-select field only ever holds one value, so this
-   always replaces whatever Work status was there before (no stacking,
-   unlike labels). **Exception:** an issue labeled `skip-qa` goes straight
-   to **Done** and gets closed instead — see below.
-3. Assigns **everyone** listed in that repo's `.github/QAOWNERS` — see below
-   (skipped for `skip-qa` issues, since there's no QA pass to assign).
+2. For each linked issue, assigns **everyone** listed in that repo's
+   `.github/QAOWNERS` — see below.
+3. Makes sure the issue's native status is **In review** (`setIssueStatus`
+   GraphQL mutation). GitHub usually set it already when the PR was opened,
+   so this mostly confirms it; it's done *after* the assignment because
+   GitHub moves an issue from Backlog to Todo when someone is assigned. An
+   issue the merge closed anyway (the repo still has auto-close on) gets
+   reopened by this — a closed issue can't be In review — and the run logs a
+   warning naming the setting to turn off. An issue closed as *not planned*
+   or *duplicate* is left closed. **Exception:** an issue labeled `skip-qa`
+   goes to **Done** instead, which closes it — see below.
 4. Leaves a comment on the issue linking back to the merged PR.
 
 **`skip-qa` label:** for issues with nothing for a tester to verify (purely
 technical work — refactors, dependency bumps, internal tooling). Label the
-issue `skip-qa` *before* the PR merges, and `qa-routing` sets Work status
-straight to **Done** and closes the issue itself, instead of Ready for QA
-plus a QAOWNERS assignment. `skip-qa` is defined in `labels.yml` alongside
-the other meta labels.
+issue `skip-qa` *before* the PR merges, and `qa-routing` sets it straight to
+**Done** (which closes it), instead of In review plus a QAOWNERS assignment.
+`skip-qa` is defined in `labels.yml` alongside the other meta labels.
 
 **`.github/QAOWNERS` format** (lives in each consuming repo, not here):
 one GitHub username per line, `@` optional, `#` for comments, blank lines
@@ -245,94 +247,81 @@ ignored:
 @bob
 ```
 
-If a repo has no `QAOWNERS` file, the workflow still sets Work status to
-Ready for QA but leaves the issue unassigned (logged as a warning in the
-workflow run) — so repos can adopt this incrementally rather than needing
-`QAOWNERS` set up before merges work at all.
+If a repo has no `QAOWNERS` file, the workflow still routes the issue to
+In review but leaves it unassigned (logged as a warning in the workflow run)
+— so repos can adopt this incrementally rather than needing `QAOWNERS` set
+up before merges work at all.
 
-**Work status field IDs:** the workflow references the `Work status` field
-and its `Ready for QA` and `Done` options (the latter used by the `skip-qa`
-path above) by GraphQL node ID (single-select fields are set by option ID,
-not name). Those IDs are hardcoded as constants in `qa-routing.yml` — if the
-field or an option is ever deleted and recreated (even with the same name),
-it gets new IDs and the workflow needs updating. Look them up via
-`repository.issueFields` for any repo in the org (the field is org-wide, so
-it shows up the same everywhere).
+The status IDs aren't hardcoded: each run looks them up by name from
+`repository.planningStatuses`, and fails loudly if GitHub ever renames
+**In review** or **Done**.
 
-## Issue status sync workflow
+## Native issue statuses
 
-`.github/workflows/issue-status-sync.yml` is a reusable workflow that keeps
-an issue's open/closed state and its **Work status** field in sync, in both
-directions. Wrapper:
-[`workflow-templates/issue-status-sync.yml`](workflow-templates/issue-status-sync.yml). Add it through the UI:
-Actions → New workflow → By havit-internal → Configure.
+Workflow status is GitHub's native **issue status** — a fixed set, the same
+in every repo, that can't be extended:
 
-What it does:
-- **Issue closed as completed** → sets Work status to **Done**. A close with
-  any other reason (won't-fix, duplicate) is left alone — "Done" implies
-  actual completion, not "not planned". **Exception:** if a merged PR closed
-  the issue and the repo also runs `qa-routing`, Work status is left to
-  `qa-routing` (Ready for QA, or Done for `skip-qa`). Both workflows fire on
-  the same merge, so without this the issue could end up Done and skip QA,
-  depending on which run finished last. "Runs `qa-routing`" means a workflow
-  file on the default branch has a `uses:` line calling the `qa-routing.yml`
-  reusable workflow; a repo without one still gets Done on a PR close. Only a
-  PR in the same repo counts — `qa-routing` skips cross-repo issues, so an
-  issue closed by another repo's PR still gets Done here.
-- **Issue reopened** → if Work status is **Done** or **Ready for QA**, sets
-  it to **In progress** — typically QA rejecting a fix. Any other status is
-  left as is, and so is an issue that was closed again before the run got to
-  it.
-- **Work status set to Done** (the `field_added` activity type, which GitHub
-  fires whenever any issue field value is set or changed) → closes the
-  issue as completed.
+| Status | Issue is | Set by |
+|---|---|---|
+| **Backlog** | open | GitHub, on every new issue; also on reopen |
+| **Todo** | open | GitHub, when someone is assigned to a Backlog issue |
+| **In progress** | open | GitHub, when a **draft** PR is linked |
+| **In review** | open | GitHub, when a non-draft PR is linked or a draft is marked ready; `qa-routing` on merge. Means "waiting for someone else" — code review, then QA |
+| **Done** | closed as completed | QA (or anyone) when it's done; `qa-routing` for `skip-qa`; closing an issue as completed |
+| **Not planned** | closed as not planned | closing an issue as not planned |
+| **Duplicate** | closed as duplicate | closing an issue as duplicate |
 
-Each direction checks the other side's current state before acting (already
-Done? already closed?), so triggering one doesn't bounce back and forth with
-the other — it settles after at most one harmless extra run.
+The status and the open/closed state are one thing: setting **Done**,
+**Not planned** or **Duplicate** closes the issue, closing it sets the
+matching status, and setting an open status on a closed issue reopens it.
+Reopening with GitHub's **Reopen** button sets **Backlog** — to send a
+closed issue back to work, set **In progress** instead, which reopens it
+too. Assigning someone to an issue that's already In review leaves it there.
 
-## PR-linked issue status workflow
+GitHub's automations above need no workflow at all, which is why
+`issue-status-sync` and `pr-linked-status` are retired. Both are left as
+no-op stubs so the wrappers still in some repos keep finishing (as skipped)
+instead of failing — **delete those wrappers**
+(`.github/workflows/issue-status-sync.yml` and `pr-linked-status.yml` in the
+consuming repo).
 
-`.github/workflows/pr-linked-status.yml` is a reusable workflow that moves
-an issue's **Work status** to **In progress** as soon as a PR is linked to
-it — same `closingIssuesReferences` detection as `qa-routing.yml` (body
-keyword or Development panel link, either way). Wrapper:
-[`workflow-templates/pr-linked-status.yml`](workflow-templates/pr-linked-status.yml). Add it through the UI:
-Actions → New workflow → By havit-internal → Configure.
+**Auto-close must be off in every repo.** With it on, a merge closes the
+linked issue as Done before QA has seen it. The setting is **Settings →
+General → Issues → "Auto-close issues with merged linked pull requests"**;
+it's on by default for a new repo and isn't exposed in the REST or GraphQL
+API, so it can't be checked or set from here — turn it off by hand when a
+repo is created. If it's left on, `qa-routing` reopens the issue to
+In review and warns in its run log.
 
-It skips issues whose Work status is already **Ready for QA** or **Done**,
-so it never walks status backward (e.g. a small follow-up PR after QA
-rejected it shouldn't undo that progress). Caveat: a PR linked *purely*
-through the Development panel, with no further edit to the PR itself,
-won't trigger this workflow until the PR's next `opened`/`edited`-type
-event — there's no dedicated webhook event for "issue linked via panel"
-alone.
+Statuses show up as icons in issue lists, can be filtered with `status:`,
+and a repository's saved issue view can use a **Board** layout with columns
+by status (swimlanes by type, priority, milestone, …) — enough for a team
+that doesn't plan in iterations. Iterations exist only in Projects; see
+"Project template" below.
 
 ## Sub-issue status rollup workflow
 
 `.github/workflows/subissue-rollup.yml` is a reusable workflow that rolls a
-parent issue's **Work status** up from its children — Task/Bug statuses roll
+parent issue's native **status** up from its children — Task/Bug statuses roll
 up to their Story, Story statuses roll up to their Feature. It's the only
-workflow here that acts on the Feature → Story → Task hierarchy; the other
-three act on one issue at a time. Wrapper:
+workflow here that acts on the Feature → Story → Task hierarchy; `qa-routing`
+acts on one issue at a time. Wrapper:
 [`workflow-templates/subissue-rollup.yml`](workflow-templates/subissue-rollup.yml). Add it through the UI:
 Actions → New workflow → By havit-internal → Configure.
 
 The rollup rule (child → parent only, never parent → child):
 
-| State of the children | Parent Work status |
-|-----------------------|--------------------|
-| No sub-issues | left alone — behaves as a normal issue under the other workflows |
-| All still Backlog/unset | left alone |
-| Any started (In progress / Ready for QA / Done), not all Done | **In progress** |
-| **All** children Done | **Done**, and the parent is closed as completed |
+| State of the children | Parent status |
+|-----------------------|---------------|
+| No sub-issues | left alone — behaves as a normal issue |
+| All still Backlog / Todo | left alone |
+| Any started (In progress / In review / Done), not all Done | **In progress** |
+| **All** children Done | **Done**, which closes the parent as completed |
 
-**"Done" means the child's Work status is Done** — not merely closed. A task
-closed by a merged PR but still at **Ready for QA** (what `qa-routing` sets on
-merge) counts as *started*, not done, so merging the last task can't mark a
-Story done before QA has signed off. This does assume the repo also runs
-`issue-status-sync`, which is what sets Work status to Done when an issue is
-closed as completed.
+**"Done" means the child's status is Done.** A task whose PR has merged waits
+in **In review** until QA moves it to Done (auto-close is off, so the merge
+doesn't close it), so it counts as *started*, not done, and merging the last
+task can't mark a Story done before QA has signed off.
 
 Key behaviours:
 
@@ -341,50 +330,47 @@ Key behaviours:
   not just a `#123` mention in the description. The manual-mention convention
   in "Feature → Story → Task hierarchy" above is fine for navigation but is
   invisible to this workflow.
-- **Self-contained — it closes the parent and climbs the tree itself.** A field
-  written with the default `GITHUB_TOKEN` does **not** trigger further workflow
-  runs, so rollup can't lean on `issue-status-sync` to close a parent it marks
-  Done, nor on a re-fired rollup to climb Story → Feature. It therefore closes a
-  Done parent itself and walks the ancestor chain **within the same run** (each
-  climb keeps its own `visited` set to stop it looping). So the last child reaching Done closes the
+- **Statuses by category, not by name.** Each status belongs to a category
+  (backlog / planned / started / completed / not planned / duplicate), and the
+  rule above reads those. An issue created before native statuses existed can
+  have no status at all; it counts by its open/closed state and close reason.
+- **Self-contained — it climbs the tree itself.** A status written with the
+  default `GITHUB_TOKEN` does **not** trigger further workflow runs, so rollup
+  can't lean on a re-fired rollup to climb Story → Feature. It walks the
+  ancestor chain **within the same run** instead (each climb keeps its own
+  `visited` set to stop it looping). So the last child reaching Done closes the
   Story *and* rolls that up into the Feature in one go.
-- **Forward-only.** It only ever advances a parent toward Done, matching
-  `pr-linked-status.yml`'s "never walk backward" stance. A child reopening
-  under an already-closed parent does **not** reopen the parent — that's left
-  to a human (or to `issue-status-sync`, if the parent itself is reopened).
-  This is the deliberate cost of having no Story-level QA step; if it ever
-  bites, a `Ready for QA` intermediate for parents can be added without a
-  redesign.
+- **Forward-only.** It only ever advances a parent toward Done. A child
+  reopening under an already-closed parent does **not** reopen the parent —
+  that's left to a human. A parent closed as *not planned* or *duplicate* is
+  never touched (setting a status would reopen it). This is the deliberate
+  cost of having no Story-level QA step.
 - **"Not planned" children are excluded.** A child closed as *not planned* or
-  *duplicate* (whatever its Work status) is dropped from the rollup, so it can neither block the parent
+  *duplicate* is dropped from the rollup, so it can neither block the parent
   from reaching Done nor count as progress.
 - **Same-repo only.** Sub-issues can cross repositories, but — like
-  `qa-routing` / `pr-linked-status` — a parent or child in another repo is
-  skipped: its events fire in that repo, and a run here can only read and write
-  issues in its own.
+  `qa-routing` — a parent or child in another repo is skipped: its events fire
+  in that repo, and a run here can only read and write issues in its own.
 
-What drives it: the wrapper triggers on a child's `closed`, `reopened` and
-`field_added` (a Work status change) — the status/close events that actually
-move the rollup; a reopen matters because it brings a child closed as not
-planned back into the count without any field write — plus the `sub_issue_*` / `parent_issue_*` events, which catch a child
-being re-parented without any status change. The **Work status field IDs** are
-the same hardcoded field/option node IDs as the other workflows — see the note
-under "QA routing workflow".
+What drives it: the wrapper triggers on a child's `status_changed` — GitHub
+fires it for a person's change, for its own automations (PR linked, someone
+assigned) and for a close or reopen, so one activity type covers all of them —
+plus the `sub_issue_*` / `parent_issue_*` events, which catch a child being
+re-parented without any status change. Status IDs are looked up by name on
+each run, nothing is hardcoded.
 
-**Status set by the other workflows reaches the rollup via a dispatch.**
-`issue-status-sync`, `pr-linked-status` and `qa-routing` write Work status with
-`GITHUB_TOKEN`, so their writes fire no `field_added` — a PR opening (In
-progress), a merge (Ready for QA / skip-qa Done) or a close (Done) would
-otherwise never reach the parent. After each such write they send a
-`work-status-changed` `repository_dispatch` listing the issues, which
-`GITHUB_TOKEN` *can* raise, and the rollup wrapper listens for it. Because it
-fires after the write, it also closes the race where a manual close reaches the
-rollup before `issue-status-sync` has set the child to Done. Sending it needs
-**`contents: write`** in those three wrappers (the templates now grant it). A
-repo that keeps `contents: read` still works — the dispatch is skipped with an
-info line — it just doesn't get automated status rolled up. The reusable
-workflows deliberately declare no `permissions:` of their own, so they inherit
-whatever the wrapper grants and an older wrapper keeps starting.
+**Status set by `qa-routing` reaches the rollup via a dispatch.** `qa-routing`
+writes the status with `GITHUB_TOKEN`, so its writes fire no `status_changed`
+— a merge (In review) or a `skip-qa` Done would otherwise never reach the
+parent. After such a write it sends a `work-status-changed`
+`repository_dispatch` listing the issues (the name predates native statuses
+and is kept so existing wrappers keep listening), which `GITHUB_TOKEN` *can*
+raise, and the rollup wrapper listens for it. Sending it needs **`contents:
+write`** in the `qa-routing` wrapper (the template grants it). A repo that
+keeps `contents: read` still works — the dispatch is skipped with an info line
+— it just doesn't get `qa-routing`'s status rolled up. The reusable workflows
+deliberately declare no `permissions:` of their own, so they inherit whatever
+the wrapper grants and an older wrapper keeps starting.
 
 **Concurrency caveat:** two status changes on *different children of the same
 parent* can run concurrently and race on the parent's status — one run computes
@@ -397,27 +383,30 @@ rare, but it's a known limitation rather than a solved problem.
 
 **Rollout — pilot first.** Like the other reusable workflows, this does
 nothing until a consuming repo adds the wrapper. Add it to **one** repo first
-(Actions → New workflow → *Sub-issue status rollup* → Configure), switch that
-repo's `issue-status-sync` / `pr-linked-status` / `qa-routing` wrappers to
-`contents: write`, and exercise the hierarchy there — start a child → the Story
-goes In progress; finish all children → the Story goes Done and closes; same
-again up to the Feature — and only then add it to the other repos. Nothing in
-this repo changes to onboard another repo; it's wrapper-only, per repo.
+(Actions → New workflow → *Sub-issue status rollup* → Configure), make sure
+that repo's `qa-routing` wrapper grants `contents: write`, and exercise the
+hierarchy there — start a child → the Story goes In progress; finish all
+children → the Story goes Done and closes; same again up to the Feature — and
+only then add it to the other repos. A repo that already has the older rollup
+wrapper must replace it with the current template: the old one listens for
+`field_added` (Work status), not `status_changed`. Nothing in this repo
+changes to onboard another repo; it's wrapper-only, per repo.
 
-## Project template: kanban on Work status, not project Status
+## Project template: kanban on project Status, synced with the issue status
 
-Projects' built-in **Status** field is per-project — every project gets its own
-copy, nothing keeps them consistent across repos, and none of the workflows
-above can write to it. The org-wide **Work status** issue field is the
-opposite: defined once, one value per issue, readable from every project and
-repo, and already driven by `qa-routing`, `issue-status-sync`, and
-`pr-linked-status`. A board here should therefore draw its columns from Work
-status and leave the project's own Status unused.
+A project can't show an issue's native status directly — there's no such field
+type. It keeps its own built-in **Status** field instead, and GitHub syncs that
+with the issue's status **by option name** (case-insensitive), both ways:
+change the issue's status and the project's Status follows; drag a card to
+another column and the issue's status follows (a card dragged to **Done**
+closes the issue). So the template's Status options must carry exactly the
+native names. An option with no native counterpart stays project-only and is
+overwritten by the next status change on the issue.
 
-That is supported: an org issue field added to a project behaves like any
-project single-select — it can be the board's **column field** as well as its
-**Group by** (swimlane) axis, and dragging a card between columns writes the
-issue field itself, which the workflows above then see.
+The sync happens only **on a change**: adding an issue to a project doesn't
+copy its current status, even when the issue is already In progress, so a
+freshly added item shows an empty Status until its issue's status next
+changes — or until triage sets it (see below).
 
 ### Template shape
 
@@ -428,17 +417,19 @@ Fields on the project:
 
 | Field | Source | Role |
 |---|---|---|
-| `Work status` | org issue field | board columns — Backlog / Ready / In progress / Ready for QA / Done |
+| `Status` | built-in project field, options **Backlog / Todo / In progress / In review / Done / Not planned** | board columns — synced with the issue's native status |
 | `Type` | native Issue Type | swimlanes — Feature / Story / Task / Bug |
 | `Priority` | org issue field | Urgent / High / Medium / Low — sort within a column |
 | `Iteration` | project iteration field, 1-week | sprint scoping — the `@current` / `@next` views filter on it |
 | `Parent issue`, `Sub-issues progress` | built-in | Feature → Story → Task roll-up |
-| `Status` | built-in project field | delete it — or hide it in every view if the project won't let it go — so nobody maintains two competing statuses |
 
-`Work status` is org-visibility **All**, but `Priority` is **Org only**, and
-org-only issue fields are hidden in projects that are public or internal — so
-either keep the project private or flip `Priority` to All in the org's issue
-field settings.
+**Duplicate** is left out of Status on purpose: GitHub needs to know *which*
+issue it duplicates to close one that way, and a card dragged to a column
+can't say. Close duplicates from the issue itself.
+
+`Priority` is org-visibility **Org only**, and org-only issue fields are
+hidden in projects that are public or internal — so either keep the project
+private or flip `Priority` to All in the org's issue field settings.
 
 Views, in tab order — boards for moving work day to day, tables for planning,
 triage and bulk edits (inline edits, paste down a column, sort and group
@@ -447,18 +438,18 @@ except **All work** is also filtered to `is:issue`:
 
 | View | Layout | Filter / setup | Who, when |
 |---|---|---|---|
-| **Current iteration** | board | `iteration:@current`; columns `Work status`, swimlanes `Type` | whole team, daily — the default view |
-| **QA queue** | table | `work-status:"Ready for QA"` — exactly what `qa-routing` sets on merge; shows `Iteration`, `Linked pull requests` | testers |
+| **Current iteration** | board | `iteration:@current`; columns `Status`, swimlanes `Type` | whole team, daily — the default view |
+| **QA queue** | table | `status:"In review"`; shows `Assignees`, `Linked pull requests`, `Iteration` | testers — In review also holds issues still in code review; a merged PR in `Linked pull requests` and the QA assignee set by `qa-routing` tell them apart |
 | **Next iteration** | table | `iteration:@next`; shows `Type`, `Priority`, `Assignees`, `Sub-issues progress` | sprint planning |
-| **Backlog & triage** | table | `no:iteration -work-status:Ready,"In progress","Ready for QA",Done` — i.e. Work status empty or Backlog, no iteration | triage: set type, priority, Work status, then an iteration |
-| **Bugs** | table | `type:Bug`; shows `Labels` (for `sev:*`), `Iteration`, `Work status` | deciding which bugs go into this or the next sprint |
+| **Backlog & triage** | table | `no:iteration -status:Todo,"In progress","In review",Done,"Not planned"` — i.e. Status empty or Backlog, no iteration | triage: set type, priority, Status, then an iteration |
+| **Bugs** | table | `type:Bug`; shows `Labels` (for `sev:*`), `Iteration`, `Status` | deciding which bugs go into this or the next sprint |
 | **Features** | table | `type:Feature`; shows `Sub-issues progress`, `Iteration` | product and leads: are each Feature's Stories moving? |
-| **All work** | table | no filter at all — deliberately includes PRs and drafts; grouped by `Work status` | overview and search, the catch-all |
+| **All work** | table | no filter at all — deliberately includes PRs and drafts; grouped by `Status` | overview and search, the catch-all |
 
-The Backlog filter excludes the other Work status values because a filter
-can't express "empty *or* Backlog" directly — if Work status gains an option,
-add it to that exclusion list. There's no roadmap view: its date axis can't be
-set through the API, so add one by hand on a project that wants a timeline.
+The Backlog filter excludes the other Status values because a filter can't
+express "empty *or* Backlog" directly. There's no roadmap view: its date axis
+can't be set through the API, so add one by hand on a project that wants a
+timeline.
 
 Add the org fields from a table view (`+` in the header → Add field → the org
 issue fields are listed alongside project fields); set column field and Group
@@ -479,33 +470,33 @@ Table / Board / Roadmap views were removed.
 
 ### Why the views are filtered to `is:issue`
 
-Issue fields only populate on issues owned by this org. Pull requests, draft
-issues, and issues from other orgs have no Work status at all and would pile
-up in a "No Work status" column. `is:issue` keeps PRs and drafts off the
+Only issues have a native status. Pull requests and draft issues can be given a
+project Status, but it syncs with nothing, and nothing moves it — they'd pile up
+in whatever column they were dropped in. `is:issue` keeps PRs and drafts off the
 board; PRs are still visible on the cards through `Linked pull requests`.
-`is:issue` does not exclude issues from other orgs, though — if one is added
-to the project it still shows up without a Work status. Auto-add only pulls
-from this org's repos, so that takes adding one by hand.
 
-Issues themselves can still lack a value. Nothing sets a Work status or an
-Iteration when an issue is created — the templates here set only a `type:` —
-so a fresh issue never reaches **Current iteration**; it shows up in **Backlog
-& triage**. That view is the intake lane: everything in it with an empty Work
-status is untriaged, and triage means setting type, priority and Work status,
-then an iteration.
+A fresh issue is Backlog and has no iteration, and since the sync doesn't run
+when an item is added, its project Status starts empty — so it never reaches
+**Current iteration**; it shows up in **Backlog & triage**. That view is the
+intake lane: triage means setting type, priority and Status, then an
+iteration. Setting Status there also sets the issue's own status.
 
-### Which built-in project automations still apply
+### Which built-in project automations to turn off
 
-The built-in workflows that *move work forward* — "when an issue or PR is
-closed, set Status to Done" and the same for merged PRs, both on by default —
-write the **project's** Status field, which a project built this way doesn't
-use. They go inert, and nothing is lost: the three reusable workflows in this
-repo do that job one level down, on the issue itself, so it holds for issues
-in no project at all.
+Because the project's Status is now synced with the issue's status, every
+built-in project workflow that **sets Status** moves the issue too — and they
+fight the native behaviour: "Item closed → Done" can turn an issue closed as
+*not planned* into one closed as completed, "Item added to project" and "Pull
+request linked to issue" would overwrite whatever status the issue has, and
+"Auto-close issue" is redundant. **Turn off every built-in workflow that sets
+Status** — "Item added to project", "Item closed", "Pull request linked to
+issue", "Pull request merged", "Auto-close issue". GitHub's native statuses
+already do that job on the issue itself, so it holds for issues in no project
+at all.
 
-The built-in workflows that don't touch Status are unaffected and still worth
-using — auto-add (pull items from a repo into the project) above all, plus
-auto-archive.
+The built-in workflows that don't touch Status stay worth using — auto-add
+(pull items from a repo into the project) above all, plus "Auto-add sub-issues
+to project" and auto-archive.
 
 ### What a copy carries, and what it doesn't
 
@@ -513,12 +504,43 @@ Copying a project (or creating one from the template) brings the views, the
 fields and their values, draft issues, insights, and configured workflows —
 **except auto-add workflows**, which are never copied. Every new project
 therefore needs its own "auto-add items from repo X" workflow wired up by
-hand.
+hand. The Status options come along as they are, so a copy syncs with the
+issues' statuses from day one.
 
-The copy does keep its board columns bound to the *issue field* `Work status`
-— it does not fall back to a project-local single select. GitHub's docs don't
-state this either way; it was checked by hand on the first project created
-from the template.
+## Migrating from Work status
+
+Before native statuses, workflow status lived in an org issue field,
+**Work status** (Backlog / Ready / In progress / Ready for QA / Done), and the
+retired `issue-status-sync` / `pr-linked-status` workflows drove it. Issues
+created before native statuses existed have no native status, and the ones
+that do may disagree with their Work status.
+
+`.github/workflows/migrate-work-status.yml` copies Work status onto the
+native status for every **open** issue in the org: Backlog → Backlog,
+Ready → Todo, In progress → In progress, Ready for QA → In review. It never
+moves an issue backward — if GitHub's automations already put it further along
+(say In review because a PR is open), that's kept — and an open issue whose
+Work status is Done is only listed, because setting Done would close it. Run it
+by hand from this repo's Actions tab: it's a **dry run by default** and puts
+what it would change in the job summary; run it again with the box unticked to
+write. An optional `repo` input limits it to one repo. It writes through
+`ORG_LABEL_SYNC_SECRET` (see "Label sync"), so each change fires
+`status_changed` in that repo and syncs to any project whose Status already has
+the native names — switch the projects over first.
+
+Order of the switch-over:
+
+1. Merge the PR that introduced native statuses here — `qa-routing` and
+   `subissue-rollup` move to native statuses for every repo at once.
+2. Per project (and the template): give Status the native options, point the
+   board columns, filters and grouping at `Status` instead of `Work status`,
+   and turn off the built-in workflows that set Status.
+3. Run `migrate-work-status` — dry run, check the summary, then for real.
+4. Per repo: delete the `issue-status-sync` / `pr-linked-status` wrappers,
+   replace an old `subissue-rollup` wrapper with the current template, and
+   check auto-close is off.
+5. Only then delete the **Work status** field (org Settings → Planning → Issue
+   fields) — deleting it drops every value it holds.
 
 ## Claude Code plugin
 

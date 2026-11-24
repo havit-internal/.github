@@ -8,13 +8,12 @@
   Closes, Fixes, or Resolves — followed by the issue number(s), e.g.
   "Fixes #123" or "Closes #10, #11" (or link the issue via the Development
   panel on the right instead — either way works). The merge does not close
-  the issue(s): the `qa-routing` workflow sets their Work status field to
-  "Ready for QA" and assigns everyone listed in this repo's
-  `.github/QAOWNERS`, and they stay open until QA sets Work status to
-  "Done". Repos without that file still get Work status set — the issues
-  are just left unassigned and the run logs a warning. An issue labeled
-  `skip-qa` goes straight to "Done", is closed on merge and is never
-  assigned to QA.
+  the issue(s): they stay "In review" (waiting for QA), the `qa-routing`
+  workflow assigns everyone listed in this repo's `.github/QAOWNERS`, and
+  they stay open until QA sets their status to "Done". Repos without that
+  file still route the issues to In review — they're just left unassigned
+  and the run logs a warning. An issue labeled `skip-qa` goes straight to
+  "Done", is closed on merge and is never assigned to QA.
 -->
 Fixes #
 
