@@ -1,0 +1,234 @@
+name: Migrate Work status to native status
+
+# One-off, run by hand (Actions → Migrate Work status to native status → Run
+# workflow), only here in havit-internal/.github. Copies the retired org
+# "Work status" issue field onto GitHub's native issue status for every OPEN
+# issue in the org, so boards on the native status start out right. Dry run by
+# default: the job summary lists what would change and nothing is written.
+#
+# Mapping: Backlog → Backlog, Ready → Todo, In progress → In progress,
+# Ready for QA → In review. Never moves an issue backward: if GitHub's own
+# automations have already put it further along (e.g. In review because a PR
+# is open), it is kept. An open issue whose Work status is Done is only
+# reported — setting Done would close it, and that is a human's call.
+#
+# Writes go through ORG_LABEL_SYNC_SECRET (Issues: Read and write on all
+# repos, the same token label-sync uses — see README.md, "Label sync"); the
+# default GITHUB_TOKEN only reaches this repo. Because they're made with a PAT,
+# each write fires `status_changed` in that repo (so subissue-rollup runs) and
+# syncs to any project whose Status has a matching option.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — only report what would change'
+        type: boolean
+        default: true
+      repo:
+        description: 'Only this repo (name without the org); empty = every repo in the org'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Verify ORG_LABEL_SYNC_SECRET secret is configured
+        env:
+          TOKEN: ${{ secrets.ORG_LABEL_SYNC_SECRET }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::ORG_LABEL_SYNC_SECRET organization secret is missing or empty — see README.md (\"Label sync\"). Nothing was migrated."
+            exit 1
+          fi
+
+      - name: Copy Work status to native status
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          ONLY_REPO: ${{ inputs.repo }}
+        with:
+          github-token: ${{ secrets.ORG_LABEL_SYNC_SECRET }}
+          script: |
+            const dryRun = process.env.DRY_RUN !== 'false';
+            const onlyRepo = (process.env.ONLY_REPO || '').trim();
+            const org = context.repo.owner;
+
+            // The org "Work status" field, by node ID (same constant the
+            // workflows used before native statuses).
+            const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
+            const MAP = {
+              'Backlog': 'Backlog',
+              'Ready': 'Todo',
+              'In progress': 'In progress',
+              'Ready for QA': 'In review',
+              'Done': 'Done',
+            };
+            // Open-issue statuses in workflow order, for the "never backward" rule.
+            const ORDER = ['Backlog', 'Todo', 'In progress', 'In review'];
+
+            const repos = onlyRepo
+              ? [{ name: onlyRepo }]
+              : (await github.paginate(github.rest.repos.listForOrg, { org, type: 'all', per_page: 100 }))
+                  .filter(r => !r.archived && !r.disabled && r.has_issues);
+
+            core.info(`${dryRun ? 'DRY RUN — ' : ''}${repos.length} repo(s) in ${org}.`);
+
+            const changes = [];      // [ref, from, to]
+            const openDone = [];     // open issues with Work status Done
+            const keptAhead = [];    // [ref, native, Work status]
+            let unchanged = 0;
+            let failed = 0;
+
+            for (const repo of repos) {
+              let after = null;
+              let statusId = null;
+              do {
+                let data;
+                try {
+                  data = await github.graphql(
+                    `query($owner: String!, $repo: String!, $after: String) {
+                      repository(owner: $owner, name: $repo) {
+                        planningStatuses(first: 20) { nodes { id name } }
+                        issues(first: 100, after: $after, states: OPEN) {
+                          pageInfo { hasNextPage endCursor }
+                          nodes {
+                            number
+                            id
+                            status { name }
+                            issueFieldValues(first: 20) {
+                              nodes {
+                                ... on IssueFieldSingleSelectValue {
+                                  name
+                                  field { ... on IssueFieldSingleSelect { id } }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }`,
+                    { owner: org, repo: repo.name, after }
+                  );
+                } catch (err) {
+                  core.warning(`${repo.name}: could not read issues — ${err.message}`);
+                  failed++;
+                  break;
+                }
+                const r = data.repository;
+                statusId ??= Object.fromEntries(r.planningStatuses.nodes.map(s => [s.name, s.id]));
+
+                for (const issue of r.issues.nodes) {
+                  const ref = `${repo.name}#${issue.number}`;
+                  const ws = issue.issueFieldValues.nodes.find(
+                    n => n.field && n.field.id === WORK_STATUS_FIELD_ID
+                  )?.name;
+                  if (!ws) continue;
+
+                  const target = MAP[ws];
+                  if (!target) {
+                    core.warning(`${ref}: unknown Work status "${ws}" — skipped.`);
+                    continue;
+                  }
+                  if (target === 'Done') {
+                    openDone.push(ref);
+                    continue;
+                  }
+
+                  // 'same' / 'ahead' / 'set' for a given native status.
+                  const decide = current =>
+                    current === target ? 'same'
+                    : current && ORDER.indexOf(current) > ORDER.indexOf(target) ? 'ahead'
+                    : 'set';
+
+                  let current = issue.status?.name ?? null;
+                  let verdict = decide(current);
+
+                  // The page above can be minutes old by the time a real run gets
+                  // here (one write per second), so re-read the issue right before
+                  // writing: skip it if it has been closed meanwhile (an open
+                  // status would reopen it) and redo the "never backward" check
+                  // against its live status.
+                  if (!dryRun && verdict === 'set') {
+                    try {
+                      const { node: live } = await github.graphql(
+                        `query($id: ID!) { node(id: $id) { ... on Issue { state status { name } } } }`,
+                        { id: issue.id }
+                      );
+                      if (live.state !== 'OPEN') {
+                        core.info(`${ref}: closed since the page was read — skipped.`);
+                        continue;
+                      }
+                      current = live.status?.name ?? null;
+                      verdict = decide(current);
+                    } catch (err) {
+                      core.warning(`${ref}: could not re-read the issue — ${err.message}`);
+                      failed++;
+                      continue;
+                    }
+                  }
+
+                  if (verdict === 'same') {
+                    unchanged++;
+                    continue;
+                  }
+                  if (verdict === 'ahead') {
+                    keptAhead.push([ref, current, ws]);
+                    continue;
+                  }
+
+                  if (dryRun) {
+                    changes.push([ref, current ?? '(no status)', target]);
+                    continue;
+                  }
+                  try {
+                    await github.graphql(
+                      `mutation($issueId: ID!, $statusId: ID!) {
+                        setIssueStatus(input: { issueId: $issueId, statusId: $statusId }) {
+                          issue { id }
+                        }
+                      }`,
+                      { issueId: issue.id, statusId: statusId[target] }
+                    );
+                    // Recorded only once the write succeeded, so the summary never
+                    // reports a failed write as migrated.
+                    changes.push([ref, current ?? '(no status)', target]);
+                    core.info(`${ref}: ${current ?? '(no status)'} → ${target}`);
+                  } catch (err) {
+                    core.warning(`${ref}: could not set ${target} — ${err.message}`);
+                    failed++;
+                  }
+                  // Stay well under GitHub's secondary rate limit for mutations.
+                  await new Promise(res => setTimeout(res, 1000));
+                }
+
+                after = r.issues.pageInfo.hasNextPage ? r.issues.pageInfo.endCursor : null;
+              } while (after);
+            }
+
+            await core.summary
+              .addHeading(dryRun ? 'Work status migration — dry run' : 'Work status migration')
+              .addList([
+                `${changes.length} issue(s) ${dryRun ? 'would be' : 'were'} set`,
+                `${unchanged} already had the matching native status`,
+                `${keptAhead.length} kept — native status already further along`,
+                `${openDone.length} open with Work status Done — not touched, close them by hand if they're done`,
+                `${failed} error(s) — see the log`,
+              ])
+              .addHeading('Changes', 3)
+              .addTable([
+                [{ data: 'Issue', header: true }, { data: 'Native status', header: true }, { data: 'Set to', header: true }],
+                ...changes,
+              ])
+              .addHeading('Kept — native status already further along', 3)
+              .addTable([
+                [{ data: 'Issue', header: true }, { data: 'Native status', header: true }, { data: 'Work status', header: true }],
+                ...keptAhead,
+              ])
+              .addHeading('Open with Work status Done', 3)
+              .addList(openDone.length ? openDone : ['none'])
+              .write();

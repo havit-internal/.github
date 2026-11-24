@@ -1,189 +1,22 @@
-name: "[Template] PR-linked issue status"
+name: "[Retired] PR-linked issue status"
 
-# Reusable workflow — called from a thin wrapper in each consuming repo.
-# When a PR is linked to an issue (via a Closes/Fixes/Resolves #N keyword or
-# the manual "link a pull request" UI), sets that issue's org-wide
-# "Work status" field to In progress — unless it's already further along
-# (Ready for QA or Done), so this never walks status backward.
-# Issues it moves also get a `work-status-changed` repository_dispatch so
-# subissue-rollup can roll the change up to their parent (see notifyRollup).
+# RETIRED — kept only so existing wrappers don't fail. Remove this repo's
+# .github/workflows/pr-linked-status.yml wrapper.
+#
+# This workflow moved the org "Work status" issue field to In progress when a
+# PR was linked to an issue. GitHub's native issue statuses do that by
+# themselves: linking a draft PR sets In progress, a non-draft PR (or marking
+# the draft ready for review) sets In review. See README.md ("Native issue
+# statuses").
 
 on:
   workflow_call: {}
 
-# No top-level `permissions:` on purpose — the job inherits exactly what the
-# caller's wrapper grants. Declaring `contents: write` here would make the run
-# fail to start in any repo whose wrapper still grants `contents: read`, and
-# declaring `contents: read` would cap the token below what notifyRollup's
-# repository_dispatch needs. The wrapper template grants issues: write,
-# pull-requests: read and contents: write.
-
 jobs:
-  sync:
-    # Self-hosted Windows runners by default. Set the org variable
-    # ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER to 1 to run on GitHub-hosted ubuntu-slim
-    # instead (e.g. while the self-hosted runners are down); any other value or
-    # no variable at all means self-hosted. Self-hosted runners need Actions
-    # Runner v2.327.1+ (actions/github-script v9 refuses to start on older).
-    runs-on: ${{ fromJSON(vars.ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER == '1' && '["ubuntu-slim"]' || '["self-hosted","windows","qa-routing"]') }}
+  retired:
+    # Never runs: the calling job finishes as skipped, so a wrapper that is
+    # still in place costs no runner time and doesn't fail.
+    if: false
+    runs-on: ubuntu-slim
     steps:
-      - name: Set Work status to In progress on linked issues
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            // Org-wide "Work status" issue field (single select) and its
-            // "In progress" option. Node IDs, not names — see qa-routing.yml for
-            // how these were looked up and when they'd need refreshing.
-            const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
-            const IN_PROGRESS_OPTION_ID = 'IFSSO_kgDOBJz3gg';
-            const SKIP_IF_STATUS = ['Ready for QA', 'Done'];
-
-            // Wake subissue-rollup for the issues whose Work status this run
-            // wrote. A field write made with GITHUB_TOKEN fires no field_added,
-            // so without this the parent never hears about it; a
-            // repository_dispatch is one of the few GITHUB_TOKEN events that
-            // DOES start runs. Needs `contents: write` in the wrapper — a repo
-            // that keeps `contents: read` (because it doesn't run the rollup)
-            // just gets a 403 here, which is logged and ignored.
-            async function notifyRollup(issueNumbers) {
-              if (issueNumbers.length === 0) return;
-              try {
-                await github.rest.repos.createDispatchEvent({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  event_type: 'work-status-changed',
-                  client_payload: { issues: issueNumbers },
-                });
-                core.info(`Sent work-status-changed for ${issueNumbers.map(n => `#${n}`).join(', ')}.`);
-              } catch (err) {
-                if (err.status === 403) {
-                  core.info('No contents: write — not notifying subissue-rollup (only needed if this repo runs it).');
-                } else {
-                  core.warning(`Could not notify subissue-rollup: ${err.message}`);
-                }
-              }
-            }
-
-            // Same closingIssuesReferences lookup as qa-routing.yml — the set of
-            // issues this PR is linked to, whether via body keyword or the
-            // Development panel UI.
-            const { repository } = await github.graphql(
-              `query($owner: String!, $repo: String!, $number: Int!) {
-                repository(owner: $owner, name: $repo) {
-                  pullRequest(number: $number) {
-                    closingIssuesReferences(first: 50) {
-                      nodes {
-                        number
-                        repository { nameWithOwner }
-                      }
-                      pageInfo { hasNextPage }
-                    }
-                  }
-                }
-              }`,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                number: context.payload.pull_request.number,
-              }
-            );
-
-            const closingIssues = repository.pullRequest.closingIssuesReferences;
-            if (closingIssues.pageInfo.hasNextPage) {
-              core.warning('This PR has more than 50 closing issue references; only the first 50 are checked.');
-            }
-            const refs = closingIssues.nodes;
-            const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
-            const crossRepo = refs.filter(r => r.repository.nameWithOwner !== sameRepo);
-            if (crossRepo.length > 0) {
-              core.warning(`Skipping closing reference(s) in other repos (not supported by this workflow): ${crossRepo.map(r => `${r.repository.nameWithOwner}#${r.number}`).join(', ')}`);
-            }
-            const issueNumbers = [...new Set(
-              refs.filter(r => r.repository.nameWithOwner === sameRepo).map(r => r.number)
-            )];
-
-            if (issueNumbers.length === 0) {
-              core.info('No linked issues found on this PR — nothing to do.');
-              return;
-            }
-
-            const changed = [];
-            for (const issue_number of issueNumbers) {
-              try {
-                // `field` on IssueFieldSingleSelectValue is the IssueFields union —
-                // GraphQL unions only allow `__typename` and inline fragments
-                // naming a concrete member type, so `field { name }` fails
-                // ("Selections can't be made directly on unions"). This value is
-                // specifically an IssueFieldSingleSelectValue, so its `field` is
-                // the corresponding concrete type, IssueFieldSingleSelect —
-                // match by ID (same ID used above for the mutation, more robust
-                // than matching a display name anyway).
-                const { repository: issueRepo } = await github.graphql(
-                  `query($owner: String!, $repo: String!, $number: Int!) {
-                    repository(owner: $owner, name: $repo) {
-                      issue(number: $number) {
-                        id
-                        state
-                        issueFieldValues(first: 20) {
-                          nodes {
-                            ... on IssueFieldSingleSelectValue {
-                              name
-                              field {
-                                ... on IssueFieldSingleSelect { id }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }`,
-                  {
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    number: issue_number,
-                  }
-                );
-
-                if (issueRepo.issue.state === 'CLOSED') {
-                  core.info(`Issue #${issue_number} is closed — not touching Work status.`);
-                  continue;
-                }
-
-                const workStatusValue = issueRepo.issue.issueFieldValues.nodes.find(
-                  n => n.field && n.field.id === WORK_STATUS_FIELD_ID
-                );
-                const currentStatus = workStatusValue ? workStatusValue.name : null;
-
-                if (currentStatus === 'In progress') {
-                  core.info(`Issue #${issue_number} Work status is already In progress — nothing to do.`);
-                  continue;
-                }
-
-                if (SKIP_IF_STATUS.includes(currentStatus)) {
-                  core.info(`Issue #${issue_number} Work status is already "${currentStatus}" — not moving it back to In progress.`);
-                  continue;
-                }
-
-                await github.graphql(
-                  `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
-                    setIssueFieldValue(input: {
-                      issueId: $issueId,
-                      issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
-                    }) {
-                      issue { id }
-                    }
-                  }`,
-                  {
-                    issueId: issueRepo.issue.id,
-                    fieldId: WORK_STATUS_FIELD_ID,
-                    optionId: IN_PROGRESS_OPTION_ID,
-                  }
-                );
-                core.info(`Issue #${issue_number}: Work status "${currentStatus ?? '(unset)'}" → In progress.`);
-                changed.push(issue_number);
-              } catch (err) {
-                core.warning(`Could not update issue #${issue_number}: ${err.message}`);
-              }
-            }
-
-            await notifyRollup(changed);
+      - run: echo "Retired — remove the pr-linked-status wrapper."

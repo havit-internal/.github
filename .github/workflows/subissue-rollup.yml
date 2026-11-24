@@ -1,47 +1,49 @@
 name: "[Template] Sub-issue status rollup"
 
 # Reusable workflow — called from a thin wrapper in each consuming repo.
-# Rolls a parent issue's org-wide "Work status" field UP from the status of
-# its native GitHub sub-issues (Feature → Story → Task/Bug), one direction
-# only (child → parent, never parent → child):
-#   - any child started (In progress / Ready for QA / Done), not all Done
+# Rolls a parent issue's native status UP from the statuses of its native
+# GitHub sub-issues (Feature → Story → Task/Bug), one direction only
+# (child → parent, never parent → child):
+#   - any child started (In progress / In review / Done), not all Done
 #       → parent In progress
-#   - ALL children Done → parent Done, and the parent is closed as completed
-#   - children closed as "not planned" (won't-fix / duplicate) are excluded
-#       from the rollup, so a won't-fix slice can't block the parent forever.
+#   - ALL children Done → parent Done (which closes it as completed)
+#   - children closed as Not planned / Duplicate are excluded from the
+#       rollup, so a won't-fix slice can't block the parent forever.
 #
-# "Done" means the child's Work status is Done — not merely closed. A task
-# closed by a merged PR but still at "Ready for QA" (qa-routing's state) counts
-# as started, not done, so the last merge can't mark a Story done before QA.
-# This assumes the repo also runs issue-status-sync, which sets Work status to
-# Done when an issue is closed as completed.
+# "Done" means the child's status is Done. A task whose PR has merged waits in
+# "In review" until QA moves it to Done (our repos have GitHub's auto-close of
+# linked issues on merge turned off), so it counts as started, not done, and
+# the last merge can't mark a Story done before QA. In a repo that still has
+# auto-close on, a child closed by a pull request (not labeled skip-qa) also
+# counts as started: the merge closed it, not QA, and qa-routing reopens it.
 #
-# Triggers: a human's Work status change (field_added), close or reopen on a
-# child (a reopened not-planned child counts again, with no field write), the
+# Statuses are read by category (backlog / planned / started / completed /
+# not_planned / duplicate), not by display name. An issue created before
+# native statuses existed can still have no status at all; it is classified by
+# its open/closed state and close reason instead.
+#
+# Triggers: `status_changed` on a child — fired for a human's change, GitHub's
+# own automations (PR linked, assignment) and a close or reopen — the
 # sub_issue_* / parent_issue_* re-parenting events, and a `work-status-changed`
-# repository_dispatch that issue-status-sync / pr-linked-status / qa-routing send
-# after their own Work status writes — those are made with GITHUB_TOKEN, so they
-# fire no field_added, and the dispatch (which GITHUB_TOKEN CAN raise) is how the
-# rollup hears about them. It runs after the writer has written, so it also
-# closes the race where a manual close reaches the rollup before
-# issue-status-sync has set the child to Done.
+# repository_dispatch that qa-routing sends after its own status writes. Those
+# are made with GITHUB_TOKEN, so they fire no `status_changed`, and the
+# dispatch (which GITHUB_TOKEN CAN raise) is how the rollup hears about them.
 #
-# Self-contained, by necessity: a field written with the default GITHUB_TOKEN
-# does NOT trigger further workflow runs, so this can't lean on issue-status-sync
-# to close a parent it marks Done, nor on a re-fired rollup to climb from Story
-# to Feature. It therefore closes a Done parent itself and walks up the ancestor
-# chain within the same run. Each climb keeps its own `visited` set to stop it
+# Self-contained, by necessity: a status written with the default GITHUB_TOKEN
+# does NOT trigger further workflow runs, so this can't lean on a re-fired
+# rollup to climb from Story to Feature. It walks up the ancestor chain within
+# the same run instead. Each climb keeps its own `visited` set to stop it
 # looping, so a later climb still recomputes an ancestor an earlier one saw.
 #
 # Forward-only: it only ever advances a parent toward Done. It never walks a
-# parent back off In progress / Ready for QA / Done (same "no backward" stance
-# as pr-linked-status.yml) — a child reopening under an already-closed parent
-# does NOT reopen the parent; that's left to a human (or to issue-status-sync,
-# if the parent itself is reopened). The "all Todo" case is likewise left alone.
+# parent back off In progress / In review / Done — a child reopening under an
+# already-closed parent does NOT reopen the parent; that's left to a human.
+# The "all Backlog / Todo" case is likewise left alone, and so is a parent
+# closed as Not planned / Duplicate (setting a status would reopen it).
 #
 # Same-repo only: GitHub sub-issues can cross repositories, but — like
-# qa-routing / pr-linked-status — this skips any parent or child in another
-# repo (their events fire in that repo, and this run can only read/write here).
+# qa-routing — this skips any parent or child in another repo (their events
+# fire in that repo, and this run can only read/write here).
 #
 # Concurrency caveat: two child events for the SAME parent can run concurrently
 # and race on the parent's status (one computes Done, another In progress). The
@@ -73,52 +75,63 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            // Org-wide "Work status" issue field (single select) and the option
-            // IDs this workflow sets. Node IDs, not names — GraphQL single-select
-            // fields are set by option ID. Same constants as the other workflows
-            // in this repo; see qa-routing.yml for how they were looked up and
-            // when they'd need refreshing (a delete + recreate mints new IDs even
-            // if the name is unchanged).
-            const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
-            const IN_PROGRESS_OPTION_ID = 'IFSSO_kgDOBJz3gg';
-            const DONE_OPTION_ID = 'IFSSO_kgDOBJz3hQ';
-
-            // Display names of the option IDs above (must match the field exactly
-            // — "In progress", not "In-progress"; verified in pr-linked-status.yml
-            // / issue-status-sync.yml).
             const IN_PROGRESS = 'In progress';
             const DONE = 'Done';
-            // A parent already sitting on any of these is "advanced" — rollup only
-            // moves it to In progress when it is NOT yet one of these, so it never
-            // walks a parent backward.
-            const ADVANCED = [IN_PROGRESS, 'Ready for QA', DONE];
-            // Close reasons that drop a child from the rollup (IssueStateReason).
-            const EXCLUDED_REASONS = ['NOT_PLANNED', 'DUPLICATE'];
+
+            // Native status IDs by name, looked up once per run so nothing is
+            // hardcoded.
+            const { repository: repoStatuses } = await github.graphql(
+              `query($owner: String!, $repo: String!) {
+                repository(owner: $owner, name: $repo) {
+                  planningStatuses(first: 20) { nodes { id name } }
+                }
+              }`,
+              { owner: context.repo.owner, repo: context.repo.repo }
+            );
+            const statusId = Object.fromEntries(
+              repoStatuses.planningStatuses.nodes.map(s => [s.name, s.id])
+            );
+            for (const name of [IN_PROGRESS, DONE]) {
+              if (!statusId[name]) {
+                core.setFailed(`Native issue status "${name}" not found in this repo — has GitHub renamed it?`);
+                return;
+              }
+            }
 
             const sameRepo = `${context.repo.owner}/${context.repo.repo}`;
 
-            // Pull the Work status option name out of an issueFieldValues node
-            // list. `field` on IssueFieldSingleSelectValue is the IssueFields
-            // union — unions only allow `__typename` / inline fragments, so
-            // `field { name }` fails ("Selections can't be made directly on
-            // unions"). Match the concrete IssueFieldSingleSelect by ID instead
-            // (same approach as issue-status-sync.yml / pr-linked-status.yml).
-            function workStatusOf(issueFieldValues) {
-              const m = (issueFieldValues?.nodes ?? []).find(
-                n => n.field && n.field.id === WORK_STATUS_FIELD_ID
-              );
-              return m ? m.name : null;
+            // Status category of an issue: backlog / planned / started /
+            // completed / not_planned / duplicate. An issue with no native
+            // status yet (created before statuses existed) falls back to its
+            // open/closed state: open → backlog, closed → by close reason.
+            function categoryOf(issue) {
+              const key = issue.status?.category?.key;
+              if (key) return key;
+              if (issue.state !== 'CLOSED') return 'backlog';
+              if (issue.stateReason === 'NOT_PLANNED') return 'not_planned';
+              if (issue.stateReason === 'DUPLICATE') return 'duplicate';
+              return 'completed';
+            }
+            const EXCLUDED = ['not_planned', 'duplicate'];
+            const STARTED_OR_DONE = ['started', 'completed'];
+
+            // A child closed as completed BY A PULL REQUEST was closed by a merge
+            // (the repo still has auto-close of linked issues on), not by QA —
+            // qa-routing is about to reopen it to In review. Count it as started,
+            // so the merge can't complete the parent before QA. skip-qa children
+            // are the exception: for them the merge IS completion.
+            function childCategoryOf(child) {
+              const cat = categoryOf(child);
+              if (cat !== 'completed') return cat;
+              const closer = child.timelineItems?.nodes?.[0]?.closer;
+              const skipQa = (child.labels?.nodes ?? []).some(l => l.name === 'skip-qa');
+              return closer?.__typename === 'PullRequest' && !skipQa ? 'started' : cat;
             }
 
-            const FIELD_FRAGMENT = `
-              issueFieldValues(first: 20) {
-                nodes {
-                  ... on IssueFieldSingleSelectValue {
-                    name
-                    field { ... on IssueFieldSingleSelect { id } }
-                  }
-                }
-              }`;
+            const STATUS_FRAGMENT = `
+              state
+              stateReason
+              status { name category { key } }`;
 
             // For an issue in THIS repo: its parent (number — only if the parent
             // is also in this repo) and whether it has sub-issues of its own.
@@ -144,23 +157,24 @@ jobs:
               };
             }
 
-            // Recompute one parent's Work status from its children. Returns true
-            // if it wrote a change (so the caller climbs to the grandparent).
+            // Recompute one parent's status from its children. Returns true if
+            // it wrote a change (so the caller climbs to the grandparent).
             async function recompute(parentNumber) {
               const { repository } = await github.graphql(
                 `query($owner: String!, $repo: String!, $number: Int!) {
                   repository(owner: $owner, name: $repo) {
                     issue(number: $number) {
                       id
-                      state
-                      ${FIELD_FRAGMENT}
+                      ${STATUS_FRAGMENT}
                       subIssues(first: 100) {
                         nodes {
                           number
-                          state
-                          stateReason
                           repository { nameWithOwner }
-                          ${FIELD_FRAGMENT}
+                          ${STATUS_FRAGMENT}
+                          labels(first: 20) { nodes { name } }
+                          timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
+                            nodes { ... on ClosedEvent { closer { __typename } } }
+                          }
                         }
                         pageInfo { hasNextPage }
                       }
@@ -179,21 +193,20 @@ jobs:
                 core.warning(`Parent #${parentNumber} has more than 100 sub-issues; only the first 100 are rolled up.`);
               }
 
-              // A child is "done" only when its Work status is Done — a task that
-              // merged but still awaits QA is "Ready for QA" (started, not done),
-              // so a merge can't complete the parent before QA. Cross-repo
-              // children are skipped entirely (we can't track their events here),
-              // and so are children closed as not planned / duplicate — a
-              // won't-fix slice must neither block the parent nor count as progress.
+              const parentCategory = categoryOf(parent);
+              if (EXCLUDED.includes(parentCategory)) {
+                core.info(`Parent #${parentNumber} is closed as ${parentCategory} — leaving alone.`);
+                return false;
+              }
+
+              // Cross-repo children are skipped entirely (we can't track their
+              // events here), and so are children closed as not planned /
+              // duplicate — a won't-fix slice must neither block the parent nor
+              // count as progress.
               const considered = parent.subIssues.nodes
                 .filter(c => c.repository.nameWithOwner === sameRepo)
-                .filter(c => !(c.state === 'CLOSED' && EXCLUDED_REASONS.includes(c.stateReason)))
-                .map(c => {
-                  const ws = workStatusOf(c.issueFieldValues);
-                  const done = ws === DONE;
-                  const started = done || ws === IN_PROGRESS || ws === 'Ready for QA';
-                  return { ws, done, started };
-                });
+                .map(childCategoryOf)
+                .filter(cat => !EXCLUDED.includes(cat));
 
               if (considered.length === 0) {
                 core.info(`Parent #${parentNumber}: no same-repo, still-planned sub-issues to roll up — leaving alone.`);
@@ -201,64 +214,41 @@ jobs:
               }
 
               let desired;
-              if (considered.every(c => c.done)) {
+              if (considered.every(cat => cat === 'completed')) {
                 desired = DONE;
-              } else if (considered.some(c => c.started)) {
+              } else if (considered.some(cat => STARTED_OR_DONE.includes(cat))) {
                 desired = IN_PROGRESS;
               } else {
-                // All children still Backlog/unset — forward-only, so leave the
-                // parent alone (we also don't carry a Backlog option ID here).
+                // All children still Backlog / Todo — forward-only, so leave the
+                // parent alone.
                 core.info(`Parent #${parentNumber}: no child has started — leaving alone.`);
                 return false;
               }
 
-              const current = workStatusOf(parent.issueFieldValues);
+              const current = parent.status?.name ?? '(no status)';
 
+              if (desired === DONE && parentCategory === 'completed') {
+                return false;
+              }
               // Never walk a parent backward: In progress only applies to a
-              // parent that isn't already advanced. (Done always advances — it's
+              // parent that hasn't started yet. (Done always advances — it's
               // only reached when every child is done.)
-              if (desired === IN_PROGRESS && ADVANCED.includes(current)) {
-                core.info(`Parent #${parentNumber} Work status is "${current}" — not moving it back to In progress.`);
+              if (desired === IN_PROGRESS && STARTED_OR_DONE.includes(parentCategory)) {
+                core.info(`Parent #${parentNumber} is "${current}" — not moving it back to In progress.`);
                 return false;
               }
 
-              let wrote = false;
-              if (current !== desired) {
-                await github.graphql(
-                  `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
-                    setIssueFieldValue(input: {
-                      issueId: $issueId,
-                      issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
-                    }) {
-                      issue { id }
-                    }
-                  }`,
-                  {
-                    issueId: parent.id,
-                    fieldId: WORK_STATUS_FIELD_ID,
-                    optionId: desired === DONE ? DONE_OPTION_ID : IN_PROGRESS_OPTION_ID,
+              // Setting Done also closes the parent as completed.
+              await github.graphql(
+                `mutation($issueId: ID!, $statusId: ID!) {
+                  setIssueStatus(input: { issueId: $issueId, statusId: $statusId }) {
+                    issue { id }
                   }
-                );
-                core.info(`Parent #${parentNumber}: Work status "${current ?? '(unset)'}" → ${desired}.`);
-                wrote = true;
-              }
-
-              // A GITHUB_TOKEN field write won't trigger issue-status-sync, so
-              // close the parent here when it reaches Done. (Mirrors
-              // issue-status-sync's Done → close, completed.)
-              if (desired === DONE && parent.state !== 'CLOSED') {
-                await github.rest.issues.update({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: parentNumber,
-                  state: 'closed',
-                  state_reason: 'completed',
-                });
-                core.info(`Parent #${parentNumber}: all children Done — closed as completed.`);
-                wrote = true;
-              }
-
-              return wrote;
+                }`,
+                { issueId: parent.id, statusId: statusId[desired] }
+              );
+              core.info(`Parent #${parentNumber}: "${current}" → ${desired}.`);
+              return true;
             }
 
             // Climb the ancestor chain in-run: recompute a parent, and if it

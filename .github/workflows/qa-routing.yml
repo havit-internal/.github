@@ -3,12 +3,13 @@ name: "[Template] QA routing"
 # Reusable workflow — called from a thin wrapper in each consuming repo.
 # Reads the merged PR's "closing issues" — the same set GitHub computes for
 # the PR's Development panel, whether linked via a Closes/Fixes/Resolves #N
-# keyword in the body OR via the manual "link a pull request" UI — sets the
-# org-wide "Work status" issue field to "Ready for QA" on those issues, and
-# assigns everyone listed in that repo's .github/QAOWNERS. See README.md for
-# the wrapper snippet and QAOWNERS format. Routed issues also get a
-# `work-status-changed` repository_dispatch so subissue-rollup can roll the
-# change up to their parent (see notifyRollup).
+# keyword in the body OR via the manual "link a pull request" UI — assigns
+# everyone listed in that repo's .github/QAOWNERS and makes sure each issue's
+# native status is "In review", which is our "waiting for QA" state. Issues
+# labeled skip-qa are set to "Done" instead, which closes them. See README.md
+# for the wrapper snippet and QAOWNERS format. Issues whose status this run
+# changes also get a `work-status-changed` repository_dispatch so
+# subissue-rollup can roll the change up to their parent (see notifyRollup).
 
 on:
   workflow_call: {}
@@ -29,7 +30,7 @@ jobs:
     # Runner v2.327.1+ (actions/github-script v9 refuses to start on older).
     runs-on: ${{ fromJSON(vars.ISSUE_WORKFLOWS_RUN_ON_HOSTED_RUNNER == '1' && '["ubuntu-slim"]' || '["self-hosted","windows","qa-routing"]') }}
     steps:
-      - name: Set QA field and assign linked issues
+      - name: Route linked issues to QA
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -37,9 +38,11 @@ jobs:
             // closes on merge — the same data backing the PR's "Development" panel.
             // It's populated from both Closes/Fixes/Resolves #N text and issues linked
             // manually via that panel's UI, so there's no body text to parse here.
+            // planningStatuses gives the native status IDs, so nothing is hardcoded.
             const { repository } = await github.graphql(
               `query($owner: String!, $repo: String!, $number: Int!) {
                 repository(owner: $owner, name: $repo) {
+                  planningStatuses(first: 20) { nodes { id name } }
                   pullRequest(number: $number) {
                     closingIssuesReferences(first: 50) {
                       nodes {
@@ -77,6 +80,21 @@ jobs:
               return;
             }
 
+            // Native issue statuses, by name. "In review" is our "waiting for QA"
+            // (GitHub also sets it when a non-draft PR is linked, so by merge time
+            // the issue is usually there already); "Done" closes the issue.
+            const statusId = Object.fromEntries(
+              repository.planningStatuses.nodes.map(s => [s.name, s.id])
+            );
+            const IN_REVIEW = 'In review';
+            const DONE = 'Done';
+            for (const name of [IN_REVIEW, DONE]) {
+              if (!statusId[name]) {
+                core.setFailed(`Native issue status "${name}" not found in this repo — has GitHub renamed it?`);
+                return;
+              }
+            }
+
             let qaOwners = [];
             try {
               const { data } = await github.rest.repos.getContent({
@@ -92,34 +110,66 @@ jobs:
                 .map(l => l.replace(/^@/, ''));
             } catch (err) {
               if (err.status === 404) {
-                core.warning('No .github/QAOWNERS file in this repo — Work status will be set but issues left unassigned.');
+                core.warning('No .github/QAOWNERS file in this repo — issues will be set to In review but left unassigned.');
               } else {
                 throw err;
               }
             }
 
-            // Org-wide "Work status" issue field (single select) and its options.
-            // These are node IDs, not names — GraphQL single-select fields are set
-            // by option ID, not by string. Looked up via repository.issueFields for
-            // havit-internal/.github; re-fetch and update these constants if the
-            // field or an option is ever recreated (a recreate mints new IDs even
-            // if the name is unchanged).
-            const WORK_STATUS_FIELD_ID = 'IFSS_kgDOAqLK8w';
-            const READY_FOR_QA_OPTION_ID = 'IFSSO_kgDOBJz3hA';
-            const DONE_OPTION_ID = 'IFSSO_kgDOBJz3hQ';
-
             // Issues labeled "skip-qa" (purely technical work, nothing for a tester
-            // to verify) go straight to Done instead of Ready for QA, and don't get
+            // to verify) go straight to Done instead of In review, and don't get
             // QAOWNERS assigned.
             const SKIP_QA_LABEL = 'skip-qa';
+            // A closed-as-won't-fix issue linked to a PR is left closed — setting
+            // a status would reopen it.
+            const LEAVE_CLOSED_REASONS = ['not_planned', 'duplicate'];
 
-            // Wake subissue-rollup for the issues whose Work status this run
-            // wrote. A field write made with GITHUB_TOKEN fires no field_added,
+            const pr = context.payload.pull_request.number;
+
+            // Did THIS merge close the issue? Only then is a closed issue ours to
+            // reopen for QA (the repo still has auto-close on). One closed by
+            // anything else — QA setting Done, an earlier PR, a person — is left
+            // alone, so a re-run or a follow-up PR can't reopen finished work.
+            async function closedByThisPr(issue_number) {
+              const { repository } = await github.graphql(
+                `query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    issue(number: $number) {
+                      timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
+                        nodes {
+                          ... on ClosedEvent {
+                            closer { ... on PullRequest { number repository { nameWithOwner } } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }`,
+                { owner: context.repo.owner, repo: context.repo.repo, number: issue_number }
+              );
+              const closer = repository.issue.timelineItems.nodes[0]?.closer;
+              return closer?.number === pr && closer.repository?.nameWithOwner === sameRepo;
+            }
+
+            async function setStatus(nodeId, name) {
+              await github.graphql(
+                `mutation($issueId: ID!, $statusId: ID!) {
+                  setIssueStatus(input: { issueId: $issueId, statusId: $statusId }) {
+                    issue { id }
+                  }
+                }`,
+                { issueId: nodeId, statusId: statusId[name] }
+              );
+            }
+
+            // Wake subissue-rollup for the issues whose status this run changed.
+            // A status written with GITHUB_TOKEN fires no `status_changed` event,
             // so without this the parent never hears about it; a
-            // repository_dispatch is one of the few GITHUB_TOKEN events that
-            // DOES start runs. Needs `contents: write` in the wrapper — a repo
-            // that keeps `contents: read` (because it doesn't run the rollup)
-            // just gets a 403 here, which is logged and ignored.
+            // repository_dispatch is one of the few GITHUB_TOKEN events that DOES
+            // start runs. The event name predates native statuses and is kept so
+            // existing rollup wrappers keep listening. Needs `contents: write` in
+            // the wrapper — a repo that keeps `contents: read` (because it doesn't
+            // run the rollup) just gets a 403 here, which is logged and ignored.
             async function notifyRollup(issueNumbers) {
               if (issueNumbers.length === 0) return;
               try {
@@ -147,47 +197,42 @@ jobs:
                   repo: context.repo.repo,
                   issue_number,
                 });
+                const current = issue.status?.name ?? null;
+
+                let closedByMerge = false;
+                if (issue.state === 'closed') {
+                  if (LEAVE_CLOSED_REASONS.includes(issue.state_reason)) {
+                    core.info(`Issue #${issue_number} is closed as ${issue.state_reason} — leaving it closed.`);
+                    continue;
+                  }
+                  if (!(await closedByThisPr(issue_number))) {
+                    core.info(`Issue #${issue_number} was already closed as completed, not by this merge — leaving it alone.`);
+                    continue;
+                  }
+                  closedByMerge = true;
+                }
 
                 const skipQa = issue.labels.some(
                   l => (typeof l === 'string' ? l : l.name) === SKIP_QA_LABEL
                 );
 
-                await github.graphql(
-                  `mutation($issueId: ID!, $fieldId: ID!, $optionId: ID!) {
-                    setIssueFieldValue(input: {
-                      issueId: $issueId,
-                      issueFields: [{ fieldId: $fieldId, singleSelectOptionId: $optionId }]
-                    }) {
-                      issue { id }
-                    }
-                  }`,
-                  {
-                    issueId: issue.node_id,
-                    fieldId: WORK_STATUS_FIELD_ID,
-                    optionId: skipQa ? DONE_OPTION_ID : READY_FOR_QA_OPTION_ID,
-                  }
-                );
-                changed.push(issue_number);
-
                 if (skipQa) {
-                  if (issue.state !== 'closed') {
-                    await github.rest.issues.update({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      issue_number,
-                      state: 'closed',
-                      state_reason: 'completed',
-                    });
+                  if (current !== DONE) {
+                    await setStatus(issue.node_id, DONE);
+                    changed.push(issue_number);
                   }
                   await github.rest.issues.createComment({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     issue_number,
-                    body: `Merged in #${context.payload.pull_request.number} — has the \`${SKIP_QA_LABEL}\` label, so it skipped QA and went straight to Done.`,
+                    body: `Merged in #${pr} — has the \`${SKIP_QA_LABEL}\` label, so it skipped QA and went straight to Done.`,
                   });
                   continue;
                 }
 
+                // Assign before setting the status: GitHub moves an issue to Todo
+                // when someone is assigned to it from Backlog, and the status we
+                // set must be the last word.
                 if (qaOwners.length > 0) {
                   await github.rest.issues.addAssignees({
                     owner: context.repo.owner,
@@ -197,11 +242,23 @@ jobs:
                   });
                 }
 
+                if (current !== IN_REVIEW) {
+                  // Setting an open status on a closed issue reopens it — only
+                  // reached when this merge closed it (the repo still has GitHub's
+                  // auto-close of linked issues on merge turned on), so it gets
+                  // its QA pass after all.
+                  if (closedByMerge) {
+                    core.warning(`Issue #${issue_number} was closed by the merge — reopening it for QA. Turn off "Auto-close issues with merged linked pull requests" in this repo's Settings → General → Issues.`);
+                  }
+                  await setStatus(issue.node_id, IN_REVIEW);
+                  changed.push(issue_number);
+                }
+
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number,
-                  body: `Merged in #${context.payload.pull_request.number} — ready for QA.` +
+                  body: `Merged in #${pr} — ready for QA (In review).` +
                         (qaOwners.length > 0
                           ? ` Assigned: ${qaOwners.map(o => '@' + o).join(', ')}.`
                           : ' No QAOWNERS configured — unassigned.'),
